@@ -25,11 +25,35 @@ const inventorySchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['general', 'pharmacy'],
+      enum: ['Medicine', 'Equipment', 'Consumables', 'Surgical', 'Lab Supplies', 'general', 'pharmacy'],
       default: 'general',
     },
     strength: {
       type: String,
+    },
+    // New fields for complete stock tracking
+    batchNo: {
+      type: String,
+    },
+    expiryDate: {
+      type: Date,
+    },
+    supplier: {
+      type: String,
+    },
+    department: {
+      type: String,
+      enum: ['General', 'Pharmacy', 'Laboratory', 'OT', 'Emergency', 'All'],
+      default: 'General',
+    },
+    purchaseDate: {
+      type: Date,
+      default: Date.now,
+    },
+    status: {
+      type: String,
+      enum: ['in-stock', 'low-stock', 'out-of-stock', 'expired'],
+      default: 'in-stock',
     },
   },
   { timestamps: true }
