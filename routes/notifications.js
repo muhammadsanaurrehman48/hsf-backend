@@ -7,7 +7,7 @@ const router = express.Router();
 // Get notifications for current user
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     const { page = 1, limit = 10, read } = req.query;
 
     let filter = { userId };
@@ -46,7 +46,7 @@ router.get('/', verifyToken, async (req, res) => {
 // Get unread notification count
 router.get('/count/unread', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const unreadCount = await Notification.countDocuments({
       userId,
@@ -66,7 +66,7 @@ router.get('/count/unread', verifyToken, async (req, res) => {
 router.put('/:notificationId/read', verifyToken, async (req, res) => {
   try {
     const { notificationId } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const notification = await Notification.findOneAndUpdate(
       { _id: notificationId, userId }, // Ensure user can only read their own notifications
@@ -89,7 +89,7 @@ router.put('/:notificationId/read', verifyToken, async (req, res) => {
 // Mark all notifications as read
 router.put('/read-all', verifyToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const result = await Notification.updateMany(
       { userId, read: false },
@@ -108,7 +108,7 @@ router.put('/read-all', verifyToken, async (req, res) => {
 router.delete('/:notificationId', verifyToken, async (req, res) => {
   try {
     const { notificationId } = req.params;
-    const userId = req.user.userId;
+    const userId = req.user.id;
 
     const notification = await Notification.findOneAndDelete({
       _id: notificationId,

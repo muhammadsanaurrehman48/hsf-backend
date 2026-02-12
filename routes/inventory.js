@@ -208,7 +208,7 @@ router.put('/:itemId', verifyToken, checkRole(['inventory', 'admin']), async (re
 });
 
 // Get low stock items
-router.get('/low-stock/list', verifyToken, checkRole(['inventory', 'admin']), async (req, res) => {
+router.get('/low-stock/list', verifyToken, checkRole(['inventory', 'admin', 'pharmacy', 'pharmacist']), async (req, res) => {
   try {
     const items = await Inventory.find();
     const lowStockItems = items.filter(i => i.quantity <= i.minStock);

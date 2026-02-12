@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['appointment_created', 'vitals_recorded', 'consultation_completed', 'lab_request', 'radiology_request'],
+      enum: ['appointment_created', 'vitals_recorded', 'consultation_completed', 'lab_request', 'radiology_request', 'invoice_created', 'prescription_dispensed'],
       required: true,
     },
     title: {
@@ -26,7 +26,7 @@ const notificationSchema = new mongoose.Schema(
     },
     relatedType: {
       type: String,
-      enum: ['appointment', 'patient', 'vitals', 'lab_request', 'radiology_request'],
+      enum: ['appointment', 'patient', 'vitals', 'lab_request', 'radiology_request', 'invoice', 'prescription'],
     },
     read: {
       type: Boolean,

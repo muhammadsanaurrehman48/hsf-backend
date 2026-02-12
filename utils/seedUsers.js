@@ -86,9 +86,20 @@ export async function seedTestUsers() {
           `✅ [SEED] Created user: ${userData.email} (${userData.role})`
         );
       } else {
-        console.log(
-          `⏭️ [SEED] User already exists: ${userData.email} (${userData.role})`
-        );
+        // Ensure password is up to date (in case user was created with different password)
+        const isPwMatch = await bcrypt.compare(userData.password, existingUser.password);
+        if (!isPwMatch) {
+          const hashedPassword = await bcrypt.hash(userData.password, 10);
+          existingUser.password = hashedPassword;
+          await existingUser.save();
+          console.log(
+            `🔄 [SEED] Updated password for: ${userData.email} (${userData.role})`
+          );
+        } else {
+          console.log(
+            `⏭️ [SEED] User already exists: ${userData.email} (${userData.role})`
+          );
+        }
       }
     }
 

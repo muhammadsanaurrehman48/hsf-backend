@@ -77,10 +77,11 @@ router.get('/patient/:patientId', verifyToken, async (req, res) => {
 });
 
 // Create prescription (doctor only)
-router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
+router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) => {
   try {
     const {
       patientId,
+      appointmentId,
       mrNo,
       forceNo,
       diagnosis,
@@ -90,8 +91,11 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
       notes,
     } = req.body;
 
-    if (!patientId || !diagnosis || !medicines || medicines.length === 0) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    console.log('📝 [BACKEND] Creating prescription for patient:', patientId, '| appointment:', appointmentId);
+
+    if (!patientId || !diagnosis) {
+      console.error('❌ [BACKEND] Missing required fields. patientId:', patientId, '| diagnosis:', diagnosis);
+      return res.status(400).json({ success: false, message: 'Patient ID and diagnosis are required' });
     }
 
     const prescriptionCount = await Prescription.countDocuments();
@@ -100,6 +104,7 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
     const newPrescription = new Prescription({
       rxNo,
       patientId,
+      appointmentId: appointmentId || undefined,
       mrNo,
       forceNo,
       doctorId: req.user.id,
