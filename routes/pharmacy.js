@@ -6,7 +6,8 @@ import Inventory from '../models/Inventory.js';
 const router = express.Router();
 
 // Get all prescriptions for pharmacy
-router.get('/prescriptions', verifyToken, checkRole(['pharmacy', 'pharmacist']), async (req, res) => {
+// Accessible to: pharmacy staff, pharmacists, doctors (view only), and admins
+router.get('/prescriptions', verifyToken, checkRole(['pharmacy', 'pharmacist', 'doctor', 'admin']), async (req, res) => {
   try {
     const prescriptions = await Prescription.find()
       .populate('patientId', 'firstName lastName mrNo forceNo')
@@ -18,13 +19,15 @@ router.get('/prescriptions', verifyToken, checkRole(['pharmacy', 'pharmacist']),
       rxNo: p.rxNo,
       patientId: p.patientId?._id,
       patient: p.patientId ? `${p.patientId.firstName} ${p.patientId.lastName}` : 'Unknown',
+      patientName: p.patientId ? `${p.patientId.firstName} ${p.patientId.lastName}` : 'Unknown',
       mrNo: p.mrNo || p.patientId?.mrNo,
       forceNo: p.forceNo || p.patientId?.forceNo,
       doctorId: p.doctorId?._id,
       doctor: p.doctorId?.name,
       diagnosis: p.diagnosis,
-      medicines: p.medicines,
+      medicines: p.medicines || [],
       status: p.status,
+      date: p.createdAt ? new Date(p.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
       createdAt: p.createdAt,
     }));
 
@@ -36,7 +39,8 @@ router.get('/prescriptions', verifyToken, checkRole(['pharmacy', 'pharmacist']),
 });
 
 // Get prescription details
-router.get('/prescription/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pharmacist']), async (req, res) => {
+// Accessible to: pharmacy staff, pharmacists, doctors (view only), and admins
+router.get('/prescription/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pharmacist', 'doctor', 'admin']), async (req, res) => {
   try {
     const prescription = await Prescription.findById(req.params.prescriptionId)
       .populate('patientId', 'firstName lastName mrNo forceNo')
@@ -86,7 +90,8 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
 });
 
 // Pharmacy inventory
-router.get('/inventory', verifyToken, checkRole(['pharmacy', 'pharmacist']), async (req, res) => {
+// GET accessible to all staff for viewing
+router.get('/inventory', verifyToken, checkRole(['pharmacy', 'pharmacist', 'doctor', 'admin', 'nurse']), async (req, res) => {
   try {
     const inventory = await Inventory.find({ category: 'pharmacy' }).sort({ name: 1 });
     const data = inventory.map(i => ({

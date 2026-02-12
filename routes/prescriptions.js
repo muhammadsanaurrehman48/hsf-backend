@@ -1,6 +1,9 @@
 import express from 'express';
 import { verifyToken, checkRole } from '../middleware/auth.js';
 import Prescription from '../models/Prescription.js';
+import Patient from '../models/Patient.js';
+import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 
 const router = express.Router();
 
@@ -109,6 +112,50 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
     });
 
     await newPrescription.save();
+    console.log('✅ [BACKEND] Prescription created:', rxNo);
+
+    // Get patient and doctor info for notifications
+    const patient = await Patient.findById(patientId);
+    const doctor = await User.findById(req.user.id);
+    
+    // Send notification to lab staff if lab tests requested
+    if (labTests && labTests.length > 0) {
+      const labStaff = await User.find({ role: 'laboratory' });
+      console.log('🔔 [BACKEND] Notifying', labStaff.length, 'lab staff about new lab requests');
+      
+      for (const staff of labStaff) {
+        await Notification.create({
+          userId: staff._id,
+          type: 'lab_request_created',
+          title: 'New Lab Request',
+          message: `New lab request from Dr. ${doctor?.name} for patient ${patient?.firstName} ${patient?.lastName} (${patient?.patientNo}). Tests: ${labTests.join(', ')}`,
+          relatedId: newPrescription._id,
+          relatedType: 'prescription',
+          actionUrl: `/laboratory/requests`,
+        });
+      }
+      console.log('✅ [BACKEND] Lab notifications created');
+    }
+
+    // Send notification to radiology staff if radiology tests requested
+    if (radiologyTests && radiologyTests.length > 0) {
+      const radiologyStaff = await User.find({ role: 'radiologist' });
+      console.log('🔔 [BACKEND] Notifying', radiologyStaff.length, 'radiology staff about new radiology requests');
+      
+      for (const staff of radiologyStaff) {
+        await Notification.create({
+          userId: staff._id,
+          type: 'radiology_request_created',
+          title: 'New Radiology Request',
+          message: `New radiology request from Dr. ${doctor?.name} for patient ${patient?.firstName} ${patient?.lastName} (${patient?.patientNo}). Tests: ${radiologyTests.join(', ')}`,
+          relatedId: newPrescription._id,
+          relatedType: 'prescription',
+          actionUrl: `/radiologist/requests`,
+        });
+      }
+      console.log('✅ [BACKEND] Radiology notifications created');
+    }
+
     res.status(201).json({ 
       success: true, 
       message: 'Prescription created', 

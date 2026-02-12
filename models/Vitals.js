@@ -2,6 +2,10 @@ import mongoose from 'mongoose';
 
 const vitalsSchema = new mongoose.Schema(
   {
+    appointmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Appointment',
+    },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Patient',

@@ -12,3 +12,4 @@ export { default as CareNote } from './CareNote.js';
 export { default as Activity } from './Activity.js';
 export { default as WardPatient } from './WardPatient.js';
 export { default as Queue } from './Queue.js';
+export { default as Notification } from './Notification.js';

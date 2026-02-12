@@ -224,4 +224,53 @@ router.post('/room/:roomNo/skip-patient/:patientIndex', verifyToken, async (req,
   }
 });
 
+// Update current token for a room/department
+router.put('/:roomNo/current-token', verifyToken, async (req, res) => {
+  try {
+    const { tokenNo } = req.body;
+    const queue = await Queue.findOne({ roomNo: req.params.roomNo });
+    
+    if (!queue) {
+      return res.status(404).json({ success: false, message: 'Queue not found for this room' });
+    }
+
+    // Find patient with this token number
+    const patientIndex = queue.patients.findIndex(p => p.tokenNo === tokenNo);
+    
+    if (patientIndex === -1) {
+      return res.status(404).json({ success: false, message: `Token ${tokenNo} not found in queue` });
+    }
+
+    // Update all patient statuses - mark previous as completed, new as serving
+    if (queue.currentPatientIndex !== -1 && queue.currentPatientIndex < queue.patients.length) {
+      const currentPatient = queue.patients[queue.currentPatientIndex];
+      if (currentPatient.status === 'serving') {
+        currentPatient.status = 'completed';
+        console.log('✅ [BACKEND] Marked', currentPatient.patientName, 'as completed');
+      }
+    }
+
+    // Set new current patient
+    queue.currentPatientIndex = patientIndex;
+    queue.currentToken = tokenNo;
+    queue.patients[patientIndex].status = 'serving';
+    
+    console.log('📢 [BACKEND] Current token updated to:', tokenNo, 'Patient:', queue.patients[patientIndex].patientName);
+
+    await queue.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Current token updated',
+      data: {
+        currentToken: queue.currentToken,
+        currentPatient: queue.patients[patientIndex],
+      }
+    });
+  } catch (err) {
+    console.error('Error updating current token:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 export default router;

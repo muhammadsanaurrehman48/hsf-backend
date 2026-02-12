@@ -55,6 +55,17 @@ const inventorySchema = new mongoose.Schema(
       enum: ['in-stock', 'low-stock', 'out-of-stock', 'expired'],
       default: 'in-stock',
     },
+    disposalStatus: {
+      type: String,
+      enum: ['active', 'marked-for-disposal', 'disposed'],
+      default: 'active',
+    },
+    disposalDate: {
+      type: Date,
+    },
+    disposalReason: {
+      type: String,
+    },
   },
   { timestamps: true }
 );

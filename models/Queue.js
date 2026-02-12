@@ -15,12 +15,16 @@ const queuePatientSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['waiting', 'serving', 'completed', 'skipped'],
+    enum: ['waiting', 'vitals_recorded', 'serving', 'completed', 'skipped'],
     default: 'waiting',
   },
   position: {
     type: Number,
     default: 0,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
   },
 });
 

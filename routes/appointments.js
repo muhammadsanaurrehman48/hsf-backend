@@ -3,6 +3,9 @@ import { verifyToken, checkRole } from '../middleware/auth.js';
 import Appointment from '../models/Appointment.js';
 import Queue from '../models/Queue.js';
 import Patient from '../models/Patient.js';
+import Notification from '../models/Notification.js';
+import User from '../models/User.js';
+import { getDailyTokenNumber, generateOPDToken } from '../utils/tokenUtils.js';
 
 const router = express.Router();
 
@@ -13,6 +16,19 @@ router.get('/', verifyToken, async (req, res) => {
       .populate('patientId', 'firstName lastName patientNo forceNo patientType')
       .populate('doctorId', 'name department')
       .sort({ createdAt: -1 });
+    
+    // Fetch all queues to get tokens
+    const queues = await Queue.find({});
+    
+    // Create a map of appointmentId to token for quick lookup
+    const tokenMap = new Map();
+    queues.forEach(queue => {
+      (queue.patients || []).forEach(patient => {
+        if (patient.appointmentId) {
+          tokenMap.set(patient.appointmentId.toString(), patient.tokenNo);
+        }
+      });
+    });
     
     const data = appointments.map(a => ({
       id: a._id,
@@ -30,6 +46,7 @@ router.get('/', verifyToken, async (req, res) => {
       status: a.status,
       reason: a.reason,
       createdAt: a.createdAt,
+      token: tokenMap.get(a._id.toString()) || null, // Include token from queue
     }));
 
     res.json({ success: true, data });
@@ -113,15 +130,33 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
   try {
     const { patientId, doctorId, roomNo, date, time, reason } = req.body;
     
-    console.log('📝 [BACKEND] Creating appointment with:', { patientId, doctorId, roomNo, date, time, reason });
+    console.log('📝 [BACKEND] Creating appointment with:', { patientId, doctorId, roomNo, date, time: time || 'auto', reason });
 
-    if (!patientId || !doctorId || !roomNo || !date || !time) {
-      console.error('❌ [BACKEND] Missing required fields');
-      return res.status(400).json({ success: false, message: 'Missing required fields (patientId, doctorId, roomNo, date, time)' });
+    // Validate required fields with detailed error logging
+    const missingFields = [];
+    if (!patientId) missingFields.push('patientId');
+    if (!doctorId) missingFields.push('doctorId');
+    if (!roomNo) missingFields.push('roomNo');
+    if (!date) missingFields.push('date');
+    
+    if (missingFields.length > 0) {
+      console.error('❌ [BACKEND] Missing required fields:', missingFields);
+      console.error('📋 [BACKEND] Received data:', { patientId, doctorId, roomNo, date, time });
+      return res.status(400).json({ 
+        success: false, 
+        message: `Missing required fields: ${missingFields.join(', ')}` 
+      });
     }
 
     const appointmentCount = await Appointment.countDocuments();
     const appointmentNo = `APT-${String(appointmentCount + 1).padStart(3, '0')}`;
+    
+    // Auto-generate time if not provided
+    const appointmentTime = time || new Date().toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
 
     const newAppointment = new Appointment({
       patientId,
@@ -129,7 +164,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       appointmentNo,
       roomNo,
       date,
-      time,
+      time: appointmentTime,
       status: 'scheduled',
       reason,
     });
@@ -137,9 +172,9 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
     await newAppointment.save();
     console.log('✅ [BACKEND] Appointment saved to database:', appointmentNo);
 
-    // Add patient to queue for this room
+    // Add patient to queue for this room and generate OPD token with daily reset
     const patient = await Patient.findById(patientId);
-    const doctor = await (await import('../models/User.js')).default.findById(doctorId);
+    const doctor = await User.findById(doctorId);
     
     console.log('📋 [BACKEND] Patient:', patient?.firstName, patient?.lastName, '| Doctor:', doctor?.name);
     
@@ -155,7 +190,13 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       });
     }
 
-    const tokenNo = `T-${roomNo}-${queue.patients.length + 1}`;
+    // Generate OPD token with daily auto-reset
+    // Count only patients added TODAY (after midnight)
+    const dailyTokenCounter = getDailyTokenNumber(queue.patients);
+    const tokenNo = generateOPDToken(roomNo, dailyTokenCounter);
+    
+    console.log('🎫 [BACKEND] Daily token counter:', dailyTokenCounter, '| Token:', tokenNo);
+    
     queue.patients.push({
       appointmentId: newAppointment._id,
       tokenNo,
@@ -168,7 +209,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
     });
 
     await queue.save();
-    console.log('✅ [BACKEND] Patient added to queue for room:', roomNo);
+    console.log('✅ [BACKEND] Patient added to queue for room:', roomNo, '| Token:', tokenNo);
 
     // Decrease doctor's available slots
     if (doctor) {
@@ -182,6 +223,23 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
         currentSlots: newSlots 
       });
     }
+
+    // Create notification for all nurses
+    const nurses = await User.find({ role: 'nurse' });
+    console.log('🔔 [BACKEND] Notifying', nurses.length, 'nurses about new appointment');
+    
+    for (const nurse of nurses) {
+      await Notification.create({
+        userId: nurse._id,
+        type: 'appointment_created',
+        title: 'New Patient Arrival',
+        message: `Patient ${patient?.firstName} ${patient?.lastName} (MR: ${patient?.patientNo}) arrived for consultation with Dr. ${doctor?.name}. Please record vitals.`,
+        relatedId: newAppointment._id,
+        relatedType: 'appointment',
+        actionUrl: `/nurse/vitals/${newAppointment._id}`,
+      });
+    }
+    console.log('✅ [BACKEND] Notifications created for nurses');
 
     // Format the response to match the GET endpoint format
     const formattedAppointment = {
@@ -197,6 +255,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       roomNo: newAppointment.roomNo,
       date: newAppointment.date,
       time: newAppointment.time,
+      token: tokenNo,
       status: newAppointment.status,
       reason: newAppointment.reason,
       createdAt: newAppointment.createdAt,
@@ -218,17 +277,63 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
 // Update appointment status
 router.put('/:appointmentId', verifyToken, async (req, res) => {
   try {
-    const appointment = await Appointment.findById(req.params.appointmentId);
+    const appointment = await Appointment.findById(req.params.appointmentId)
+      .populate('doctorId');
     if (!appointment) {
       return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
 
     const { status, time, date } = req.body;
+    const previousStatus = appointment.status;
+    
     if (status) appointment.status = status;
     if (time) appointment.time = time;
     if (date) appointment.date = date;
 
     await appointment.save();
+    console.log('📝 [BACKEND] Appointment status updated:', appointment.appointmentNo, '| From:', previousStatus, 'To:', status);
+
+    // Handle slot restoration when appointment is completed or cancelled
+    if (status && (status === 'completed' || status === 'cancelled' || status === 'no-show')) {
+      if (appointment.doctorId) {
+        const doctor = await User.findById(appointment.doctorId._id);
+        if (doctor) {
+          const previousSlots = doctor.available_slots || 0;
+          const maxSlots = doctor.max_slots || 10;
+          const restoredSlots = Math.min(maxSlots, previousSlots + 1);
+          doctor.available_slots = restoredSlots;
+          await doctor.save();
+          console.log('🎫 [BACKEND] Slot restored:', {
+            doctorName: doctor.name,
+            previousSlots: previousSlots,
+            currentSlots: restoredSlots,
+            maxSlots: maxSlots
+          });
+        }
+      }
+    }
+
+    // Sync update to queue - find and update the patient in queue
+    if (status) {
+      const queue = await Queue.findOne({ roomNo: appointment.roomNo });
+      if (queue) {
+        const patientInQueue = queue.patients.find(p => p.appointmentId?.toString() === appointment._id.toString());
+        if (patientInQueue) {
+          console.log('📋 [BACKEND] Syncing queue for appointment. Old status:', patientInQueue.status, '| New status:', status);
+          // Map appointment status to queue status
+          if (status === 'completed') {
+            patientInQueue.status = 'completed';
+          } else if (status === 'cancelled' || status === 'no-show') {
+            patientInQueue.status = 'skipped';
+          } else if (status === 'vitals_recorded') {
+            patientInQueue.status = 'vitals_recorded';
+          }
+          await queue.save();
+          console.log('✅ [BACKEND] Queue synced for appointment:', appointment.appointmentNo);
+        }
+      }
+    }
+
     res.json({ 
       success: true, 
       message: 'Appointment updated', 
@@ -246,13 +351,166 @@ router.put('/:appointmentId', verifyToken, async (req, res) => {
 // Delete appointment
 router.delete('/:appointmentId', verifyToken, checkRole(['receptionist', 'admin']), async (req, res) => {
   try {
-    const appointment = await Appointment.findByIdAndDelete(req.params.appointmentId);
+    const appointmentId = req.params.appointmentId;
+    console.log('🔍 [BACKEND] Deleting appointment:', appointmentId);
+    
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      console.error('❌ [BACKEND] Appointment not found:', appointmentId);
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    const roomNo = appointment.roomNo;
+    const appointmentIdStr = appointment._id.toString();
+    console.log('📍 [BACKEND] Appointment details - Room:', roomNo, '| AppointmentId:', appointmentIdStr);
+
+    // Find and update queue BEFORE deleting the appointment
+    const queue = await Queue.findOne({ roomNo });
+    console.log('🔎 [BACKEND] Queue lookup for room:', roomNo, '| Found:', !!queue);
+    
+    if (queue) {
+      console.log('📊 [BACKEND] Queue has', queue.patients.length, 'patients');
+      
+      // Find the patient by appointmentId
+      const patientIndex = queue.patients.findIndex(p => {
+        const pAppId = p.appointmentId?.toString();
+        console.log('  ↳ Checking patient:', p.patientName, '| AppointmentId:', pAppId, '| Match:', pAppId === appointmentIdStr);
+        return pAppId === appointmentIdStr;
+      });
+
+      console.log('🔎 [BACKEND] Patient index found:', patientIndex);
+
+      if (patientIndex !== -1) {
+        const removedPatient = queue.patients.splice(patientIndex, 1)[0];
+        console.log('🗑️ [BACKEND] Removed', removedPatient.patientName, 'from queue for room:', roomNo);
+        
+        // If we removed the current patient (index 0), advance to next one
+        if (patientIndex === 0 && queue.patients.length > 0) {
+          const nextPatient = queue.patients[0]; // First patient becomes current
+          if (nextPatient) {
+            nextPatient.status = 'serving';
+            queue.currentToken = nextPatient.tokenNo;
+            queue.currentPatientIndex = 0;
+            console.log('⏭️ [BACKEND] Auto-advanced to next patient:', nextPatient.patientName, '| Token:', nextPatient.tokenNo);
+          }
+        } else if (queue.patients.length === 0) {
+          queue.currentToken = null;
+          queue.currentPatientIndex = 0;
+          console.log('🛑 [BACKEND] Queue is now empty');
+        }
+        
+        await queue.save();
+        console.log('✅ [BACKEND] Queue updated after appointment deletion | Patients remaining:', queue.patients.length);
+      } else {
+        console.warn('⚠️ [BACKEND] Patient with appointmentId', appointmentIdStr, 'not found in queue');
+      }
+    } else {
+      console.warn('⚠️ [BACKEND] Queue not found for room:', roomNo);
+    }
+
+    // Restore doctor's slot before deleting
+    const doctor = await User.findById(appointment.doctorId);
+    if (doctor) {
+      const previousSlots = doctor.available_slots || 0;
+      const maxSlots = doctor.max_slots || 10;
+      const restoredSlots = Math.min(maxSlots, previousSlots + 1);
+      doctor.available_slots = restoredSlots;
+      await doctor.save();
+      console.log('🎫 [BACKEND] Slot restored on deletion:', {
+        doctorName: doctor.name,
+        previousSlots: previousSlots,
+        currentSlots: restoredSlots,
+        maxSlots: maxSlots
+      });
+    }
+
+    // Now delete the appointment
+    await Appointment.findByIdAndDelete(appointmentId);
+    console.log('✅ [BACKEND] Appointment deleted from database');
+
+    res.json({ success: true, message: 'Appointment deleted', removedFromQueue: true });
+  } catch (err) {
+    console.error('❌ [BACKEND] Error deleting appointment:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Assign token to appointment (manual queue entry)
+router.post('/:appointmentId/assign-token', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.appointmentId)
+      .populate('patientId', 'firstName lastName patientNo forceNo')
+      .populate('doctorId', 'name department');
+    
     if (!appointment) {
       return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
-    res.json({ success: true, message: 'Appointment deleted' });
+
+    console.log('🎫 [BACKEND] Assigning token to appointment:', appointment.appointmentNo);
+
+    // Get or create queue for this room
+    let queue = await Queue.findOne({ roomNo: appointment.roomNo });
+    
+    if (!queue) {
+      queue = new Queue({
+        doctorId: appointment.doctorId._id,
+        roomNo: appointment.roomNo,
+        doctorName: appointment.doctorId.name,
+        department: appointment.doctorId.department,
+        status: 'active',
+        patients: [],
+      });
+      console.log('📋 [BACKEND] Created new queue for room:', appointment.roomNo);
+    }
+
+    // Check if patient already in queue
+    const existingPatient = queue.patients.find(p => p.appointmentId?.toString() === appointment._id.toString());
+    
+    if (existingPatient) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Patient already has a token in this queue',
+        tokenNo: existingPatient.tokenNo 
+      });
+    }
+
+    // Generate token
+    const tokenNo = `T-${appointment.roomNo}-${queue.patients.length + 1}`;
+    
+    queue.patients.push({
+      appointmentId: appointment._id,
+      tokenNo,
+      patientNo: appointment.patientId.patientNo,
+      patientName: `${appointment.patientId.firstName} ${appointment.patientId.lastName}`,
+      forceNo: appointment.patientId.forceNo,
+      patientId: appointment.patientId._id,
+      status: 'waiting',
+      position: queue.patients.length,
+    });
+
+    // If this is the first patient, make them serving
+    if (queue.patients.length === 1) {
+      queue.patients[0].status = 'serving';
+      queue.currentToken = tokenNo;
+      queue.currentPatientIndex = 0;
+      console.log('👤 [BACKEND] First patient automatically set as serving');
+    }
+
+    await queue.save();
+    console.log('✅ [BACKEND] Token assigned:', tokenNo, 'To patient:', appointment.patientId.firstName);
+
+    res.json({ 
+      success: true, 
+      message: 'Token assigned successfully',
+      data: {
+        tokenNo,
+        patientName: `${appointment.patientId.firstName} ${appointment.patientId.lastName}`,
+        roomNo: appointment.roomNo,
+        position: queue.patients.length,
+      }
+    });
   } catch (err) {
-    console.error('Error deleting appointment:', err);
+    console.error('❌ [BACKEND] Error assigning token:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

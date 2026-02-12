@@ -25,6 +25,8 @@ import departmentRoutes from './routes/departments.js';
 import queueRoutes from './routes/queue.js';
 import vitalsRoutes from './routes/vitals.js';
 import referralRoutes from './routes/referrals.js';
+import notificationRoutes from './routes/notifications.js';
+import seedTestUsers from './utils/seedUsers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -78,6 +80,9 @@ const connectDB = async () => {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/smart_hospital');
     console.log('✓ MongoDB connected');
     
+    // Seed test users on startup
+    await seedTestUsers();
+    
     // console.log('✓ Database connection setup (using in-memory data)');
   } catch (err) {
     console.error('✗ Database connection error:', err.message);
@@ -103,6 +108,7 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/vitals', vitalsRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
