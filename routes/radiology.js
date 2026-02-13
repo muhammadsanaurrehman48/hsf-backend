@@ -1,6 +1,8 @@
 import express from 'express';
 import { verifyToken, checkRole } from '../middleware/auth.js';
 import RadiologyRequest from '../models/RadiologyRequest.js';
+import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 
 const router = express.Router();
 
@@ -17,12 +19,14 @@ router.get('/', verifyToken, async (req, res) => {
       requestNo: r.requestNo,
       patientId: r.patientId?._id,
       patient: r.patientId ? `${r.patientId.firstName} ${r.patientId.lastName}` : 'Unknown',
+      patientName: r.patientId ? `${r.patientId.firstName} ${r.patientId.lastName}` : 'Unknown',
       mrNo: r.mrNo || r.patientId?.mrNo,
       forceNo: r.forceNo || r.patientId?.forceNo,
+      test: r.testType,
       testType: r.testType,
       doctorId: r.doctorId?._id,
       doctor: r.doctorId?.name,
-      requestDate: r.requestDate,
+      requestDate: r.requestDate ? new Date(r.requestDate).toLocaleDateString() : '',
       status: r.status,
       report: r.report,
       createdAt: r.createdAt,
@@ -110,18 +114,56 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
 });
 
 // Update radiology request status
-router.put('/:requestId', verifyToken, checkRole(['radiologist', 'doctor']), async (req, res) => {
+router.put('/:requestId', verifyToken, checkRole(['radiologist', 'radiology', 'doctor']), async (req, res) => {
   try {
-    const request = await RadiologyRequest.findById(req.params.requestId);
+    const request = await RadiologyRequest.findById(req.params.requestId)
+      .populate('patientId', 'firstName lastName')
+      .populate('doctorId', 'name');
     if (!request) {
       return res.status(404).json({ success: false, message: 'Radiology request not found' });
     }
 
+    const previousStatus = request.status;
     const { status, report } = req.body;
     if (status) request.status = status;
     if (report) request.report = report;
 
     await request.save();
+
+    // Notify doctor when exam is started (in-progress)
+    if (status === 'in-progress' && previousStatus === 'pending' && request.doctorId) {
+      const patientName = request.patientId ? `${request.patientId.firstName} ${request.patientId.lastName}` : 'Patient';
+      try {
+        await Notification.create({
+          userId: request.doctorId._id || request.doctorId,
+          type: 'radiology_request',
+          title: 'Radiology Exam Started',
+          message: `Radiology exam "${request.testType}" for ${patientName} is now in progress.`,
+          relatedId: request._id,
+          relatedType: 'radiology_request',
+        });
+      } catch (notifErr) {
+        console.error('Error creating radiology in-progress notification:', notifErr);
+      }
+    }
+
+    // Notify doctor when report is completed
+    if (status === 'completed' && previousStatus !== 'completed' && request.doctorId) {
+      const patientName = request.patientId ? `${request.patientId.firstName} ${request.patientId.lastName}` : 'Patient';
+      try {
+        await Notification.create({
+          userId: request.doctorId._id || request.doctorId,
+          type: 'radiology_report_completed',
+          title: 'Radiology Report Ready',
+          message: `Radiology report for "${request.testType}" of ${patientName} is now available.`,
+          relatedId: request._id,
+          relatedType: 'radiology_request',
+        });
+      } catch (notifErr) {
+        console.error('Error creating radiology completion notification:', notifErr);
+      }
+    }
+
     res.json({ 
       success: true, 
       message: 'Radiology request updated', 

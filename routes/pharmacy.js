@@ -208,13 +208,21 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
 // GET accessible to all staff for viewing
 router.get('/inventory', verifyToken, checkRole(['pharmacy', 'pharmacist', 'doctor', 'admin', 'nurse']), async (req, res) => {
   try {
-    const inventory = await Inventory.find({ category: 'pharmacy' }).sort({ name: 1 });
+    const inventory = await Inventory.find({ category: { $in: ['Medicine', 'pharmacy'] } }).sort({ name: 1 });
     const data = inventory.map(i => ({
       id: i._id,
       name: i.name,
       strength: i.strength,
       quantity: i.quantity,
+      stock: i.quantity,
       unit: i.unit,
+      price: i.price || 0,
+      category: i.category,
+      batchNo: i.batchNo || '',
+      minStock: i.minStock || 0,
+      expiry: i.expiryDate ? new Date(i.expiryDate).toLocaleDateString() : '—',
+      supplier: i.supplier || '',
+      status: i.status,
     }));
     res.json({ success: true, data });
   } catch (err) {

@@ -4,6 +4,8 @@ import Prescription from '../models/Prescription.js';
 import Patient from '../models/Patient.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
+import LabRequest from '../models/LabRequest.js';
+import RadiologyRequest from '../models/RadiologyRequest.js';
 
 const router = express.Router();
 
@@ -123,8 +125,27 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
     const patient = await Patient.findById(patientId);
     const doctor = await User.findById(req.user.id);
     
-    // Send notification to lab staff if lab tests requested
+    // Send notification to lab staff if lab tests requested + create LabRequest documents
     if (labTests && labTests.length > 0) {
+      // Create individual LabRequest documents for each test
+      const labRequestDocs = [];
+      for (const testName of labTests) {
+        const labCount = await LabRequest.countDocuments();
+        const requestNo = `LAB-${new Date().getFullYear()}-${String(labCount + 1).padStart(4, '0')}`;
+        const labReq = await LabRequest.create({
+          requestNo,
+          patientId,
+          mrNo: mrNo || patient?.mrNo,
+          forceNo: forceNo || patient?.forceNo,
+          test: testName,
+          doctorId: req.user.id,
+          requestDate: new Date(),
+          status: 'pending',
+        });
+        labRequestDocs.push(labReq);
+        console.log('📋 [BACKEND] LabRequest created:', requestNo, '-', testName);
+      }
+
       const labStaff = await User.find({ role: 'laboratory' });
       console.log('🔔 [BACKEND] Notifying', labStaff.length, 'lab staff about new lab requests');
       
@@ -133,17 +154,34 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
           userId: staff._id,
           type: 'lab_request_created',
           title: 'New Lab Request',
-          message: `New lab request from Dr. ${doctor?.name} for patient ${patient?.firstName} ${patient?.lastName} (${patient?.patientNo}). Tests: ${labTests.join(', ')}`,
+          message: `Dr. ${doctor?.name} requested lab tests for ${patient?.firstName} ${patient?.lastName}: ${labTests.join(', ')}`,
           relatedId: newPrescription._id,
-          relatedType: 'prescription',
+          relatedType: 'lab_request',
           actionUrl: `/laboratory/requests`,
         });
       }
       console.log('✅ [BACKEND] Lab notifications created');
     }
 
-    // Send notification to radiology staff if radiology tests requested
+    // Send notification to radiology staff if radiology tests requested + create RadiologyRequest documents
     if (radiologyTests && radiologyTests.length > 0) {
+      // Create individual RadiologyRequest documents for each test
+      for (const testName of radiologyTests) {
+        const radCount = await RadiologyRequest.countDocuments();
+        const requestNo = `RAD-${new Date().getFullYear()}-${String(radCount + 1).padStart(4, '0')}`;
+        await RadiologyRequest.create({
+          requestNo,
+          patientId,
+          mrNo: mrNo || patient?.mrNo,
+          forceNo: forceNo || patient?.forceNo,
+          testType: testName,
+          doctorId: req.user.id,
+          requestDate: new Date(),
+          status: 'pending',
+        });
+        console.log('📋 [BACKEND] RadiologyRequest created:', requestNo, '-', testName);
+      }
+
       const radiologyStaff = await User.find({ role: 'radiologist' });
       console.log('🔔 [BACKEND] Notifying', radiologyStaff.length, 'radiology staff about new radiology requests');
       
@@ -152,9 +190,9 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
           userId: staff._id,
           type: 'radiology_request_created',
           title: 'New Radiology Request',
-          message: `New radiology request from Dr. ${doctor?.name} for patient ${patient?.firstName} ${patient?.lastName} (${patient?.patientNo}). Tests: ${radiologyTests.join(', ')}`,
+          message: `Dr. ${doctor?.name} requested imaging for ${patient?.firstName} ${patient?.lastName}: ${radiologyTests.join(', ')}`,
           relatedId: newPrescription._id,
-          relatedType: 'prescription',
+          relatedType: 'radiology_request',
           actionUrl: `/radiologist/requests`,
         });
       }

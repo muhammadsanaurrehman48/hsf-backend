@@ -1,6 +1,8 @@
 import express from 'express';
 import { verifyToken, checkRole } from '../middleware/auth.js';
 import LabRequest from '../models/LabRequest.js';
+import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 
 const router = express.Router();
 
@@ -17,12 +19,13 @@ router.get('/', verifyToken, async (req, res) => {
       requestNo: r.requestNo,
       patientId: r.patientId?._id,
       patient: r.patientId ? `${r.patientId.firstName} ${r.patientId.lastName}` : 'Unknown',
+      patientName: r.patientId ? `${r.patientId.firstName} ${r.patientId.lastName}` : 'Unknown',
       mrNo: r.mrNo || r.patientId?.mrNo,
       forceNo: r.forceNo || r.patientId?.forceNo,
       test: r.test,
       doctorId: r.doctorId?._id,
       doctor: r.doctorId?.name,
-      requestDate: r.requestDate,
+      requestDate: r.requestDate ? new Date(r.requestDate).toLocaleDateString() : '',
       status: r.status,
       result: r.result,
       createdAt: r.createdAt,
@@ -112,16 +115,49 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
 // Update lab request status
 router.put('/:requestId', verifyToken, checkRole(['laboratory', 'lab_technician', 'doctor']), async (req, res) => {
   try {
-    const request = await LabRequest.findById(req.params.requestId);
+    const request = await LabRequest.findById(req.params.requestId)
+      .populate('patientId', 'firstName lastName')
+      .populate('doctorId', 'name');
     if (!request) {
       return res.status(404).json({ success: false, message: 'Lab request not found' });
     }
 
     const { status, result } = req.body;
+    const previousStatus = request.status;
     if (status) request.status = status;
-    if (result) request.result = result;
+    if (result !== undefined) request.result = result;
 
     await request.save();
+
+    const patientName = request.patientId ? `${request.patientId.firstName} ${request.patientId.lastName}` : 'Patient';
+
+    // Notify doctor when result is completed
+    if (status === 'completed' && request.doctorId) {
+      await Notification.create({
+        userId: request.doctorId._id || request.doctorId,
+        type: 'lab_result_completed',
+        title: 'Lab Results Ready',
+        message: `Lab results for ${patientName} - ${request.test} (${request.requestNo}) are ready.`,
+        relatedId: request._id,
+        relatedType: 'lab_request',
+        actionUrl: '/doctor/lab-requests',
+      });
+      console.log('🔔 [LAB] Notified doctor about completed result:', request.requestNo);
+    }
+
+    // Notify doctor when sample is collected (status changes)
+    if (status === 'sample-collected' && previousStatus === 'pending' && request.doctorId) {
+      await Notification.create({
+        userId: request.doctorId._id || request.doctorId,
+        type: 'lab_request',
+        title: 'Sample Collected',
+        message: `Sample collected for ${patientName} - ${request.test} (${request.requestNo}). Processing started.`,
+        relatedId: request._id,
+        relatedType: 'lab_request',
+        actionUrl: '/doctor/lab-requests',
+      });
+    }
+
     res.json({ 
       success: true, 
       message: 'Lab request updated', 
