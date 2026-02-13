@@ -26,7 +26,6 @@ import queueRoutes from './routes/queue.js';
 import vitalsRoutes from './routes/vitals.js';
 import referralRoutes from './routes/referrals.js';
 import notificationRoutes from './routes/notifications.js';
-import seedTestUsers from './utils/seedUsers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -79,9 +78,6 @@ const connectDB = async () => {
     // Uncomment the line below to connect to MongoDB
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/smart_hospital');
     console.log('✓ MongoDB connected');
-    
-    // Seed test users on startup
-    await seedTestUsers();
     
     // console.log('✓ Database connection setup (using in-memory data)');
   } catch (err) {
