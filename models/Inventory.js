@@ -25,7 +25,7 @@ const inventorySchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['Medicine', 'Equipment', 'Consumables', 'Surgical', 'Lab Supplies', 'general', 'pharmacy'],
+      enum: ['Medicine', 'Equipment', 'Consumables', 'Surgical', 'Lab Supplies', 'Radiology', 'general', 'pharmacy'],
       default: 'general',
     },
     strength: {

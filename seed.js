@@ -130,7 +130,7 @@ const seedDatabase = async () => {
         name: 'Pharmacist Bilal',
         email: 'pharmacist@smarthospital.com',
         password: await bcrypt.hash('password123', salt),
-        role: 'pharmacist',
+        role: 'pharmacy',
         department: 'Pharmacy',
         phone: '0305-2222222',
         avatar: 'https://i.pravatar.cc/150?img=11',
@@ -139,7 +139,7 @@ const seedDatabase = async () => {
         name: 'Lab Tech Hassan',
         email: 'lab@smarthospital.com',
         password: await bcrypt.hash('password123', salt),
-        role: 'lab_technician',
+        role: 'laboratory',
         department: 'Laboratory',
         phone: '0306-3333333',
         avatar: 'https://i.pravatar.cc/150?img=12',
@@ -152,6 +152,15 @@ const seedDatabase = async () => {
         department: 'Radiology',
         phone: '0307-4444444',
         avatar: 'https://i.pravatar.cc/150?img=10',
+      },
+      {
+        name: 'Hamza Kashif',
+        email: 'hamzakashif@hsf.com',
+        password: await bcrypt.hash('password123', salt),
+        role: 'laboratory',
+        department: 'Laboratory',
+        phone: '0308-5555555',
+        avatar: 'https://i.pravatar.cc/150?img=13',
       },
     ];
 
@@ -450,6 +459,26 @@ const seedDatabase = async () => {
       { name: 'Amoxicillin', strength: '500mg', quantity: 300, unit: 'capsules', minStock: 60, price: 15, category: 'pharmacy' },
       { name: 'Metformin', strength: '500mg', quantity: 450, unit: 'tablets', minStock: 90, price: 6, category: 'pharmacy' },
       { name: 'Salbutamol Inhaler', strength: '100mcg', quantity: 50, unit: 'inhalers', minStock: 10, price: 350, category: 'pharmacy' },
+      // Lab tests
+      { name: 'Complete Blood Count (CBC)', quantity: 999, unit: 'tests', minStock: 10, price: 500, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Blood Sugar Fasting', quantity: 999, unit: 'tests', minStock: 10, price: 300, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Blood Sugar Random', quantity: 999, unit: 'tests', minStock: 10, price: 300, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'HbA1c', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Lipid Profile', quantity: 999, unit: 'tests', minStock: 10, price: 700, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Liver Function Tests (LFT)', quantity: 999, unit: 'tests', minStock: 10, price: 900, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Renal Function Tests (RFT)', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Thyroid Function Tests (TFT)', quantity: 999, unit: 'tests', minStock: 10, price: 1200, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Urine Routine Examination', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'ECG (Electrocardiogram)', quantity: 999, unit: 'tests', minStock: 10, price: 500, category: 'Lab Supplies', department: 'Laboratory' },
+      // Radiology tests
+      { name: 'X-Ray Chest (PA View)', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Radiology', department: 'General' },
+      { name: 'X-Ray Abdomen', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Radiology', department: 'General' },
+      { name: 'Ultrasound Abdomen', quantity: 999, unit: 'tests', minStock: 10, price: 1500, category: 'Radiology', department: 'General' },
+      { name: 'CT Scan Brain', quantity: 999, unit: 'tests', minStock: 10, price: 5000, category: 'Radiology', department: 'General' },
+      { name: 'CT Scan Chest', quantity: 999, unit: 'tests', minStock: 10, price: 5000, category: 'Radiology', department: 'General' },
+      { name: 'MRI Brain', quantity: 999, unit: 'tests', minStock: 10, price: 8000, category: 'Radiology', department: 'General' },
+      { name: 'MRI Spine (Lumbar)', quantity: 999, unit: 'tests', minStock: 10, price: 8000, category: 'Radiology', department: 'General' },
+      { name: 'Echocardiography', quantity: 999, unit: 'tests', minStock: 10, price: 3000, category: 'Radiology', department: 'General' },
     ];
 
     const inventory = await Inventory.insertMany(inventoryData);

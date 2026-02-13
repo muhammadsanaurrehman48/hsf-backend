@@ -65,13 +65,11 @@ export async function seedTestUsers() {
       const existingUser = await User.findOne({ email: userData.email });
 
       if (!existingUser) {
-        // Hash password using bcrypt with salt rounds = 10
-        const hashedPassword = await bcrypt.hash(userData.password, 10);
-
+        // Pass plain password - the pre-save hook in User model will hash it
         const newUser = new User({
           name: userData.name,
           email: userData.email,
-          password: hashedPassword,
+          password: userData.password,
           role: userData.role,
           department: userData.department,
           phone: '0300-0000000',
@@ -89,8 +87,8 @@ export async function seedTestUsers() {
         // Ensure password is up to date (in case user was created with different password)
         const isPwMatch = await bcrypt.compare(userData.password, existingUser.password);
         if (!isPwMatch) {
-          const hashedPassword = await bcrypt.hash(userData.password, 10);
-          existingUser.password = hashedPassword;
+          // Set plain password - the pre-save hook will hash it automatically
+          existingUser.password = userData.password;
           await existingUser.save();
           console.log(
             `🔄 [SEED] Updated password for: ${userData.email} (${userData.role})`
