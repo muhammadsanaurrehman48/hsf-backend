@@ -289,12 +289,12 @@ const seedDatabase = async () => {
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     
     const appointmentsData = [
-      { patientId: patients[0]._id, doctorId: doctor1._id, appointmentNo: 'APT-001', roomNo: '101', date: today, time: '10:00', status: 'scheduled', reason: 'Follow-up consultation' },
-      { patientId: patients[1]._id, doctorId: doctor2._id, appointmentNo: 'APT-002', roomNo: '102', date: today, time: '10:30', status: 'scheduled', reason: 'General checkup' },
-      { patientId: patients[2]._id, doctorId: doctor1._id, appointmentNo: 'APT-003', roomNo: '101', date: today, time: '11:00', status: 'completed', reason: 'Cardiac evaluation' },
-      { patientId: patients[3]._id, doctorId: doctor2._id, appointmentNo: 'APT-004', roomNo: '102', date: tomorrow, time: '09:00', status: 'scheduled', reason: 'Migraine treatment' },
-      { patientId: patients[4]._id, doctorId: doctor1._id, appointmentNo: 'APT-005', roomNo: '101', date: tomorrow, time: '09:30', status: 'scheduled', reason: 'Heart checkup' },
-      { patientId: patients[5]._id, doctorId: doctor2._id, appointmentNo: 'APT-006', roomNo: '102', date: tomorrow, time: '10:00', status: 'scheduled', reason: 'Routine checkup' },
+      { patientId: patients[0]._id, doctorId: doctor1._id, appointmentNo: 'APT-001', roomNo: '1', date: today, time: '10:00', status: 'scheduled', reason: 'Follow-up consultation' },
+      { patientId: patients[1]._id, doctorId: doctor2._id, appointmentNo: 'APT-002', roomNo: '2', date: today, time: '10:30', status: 'scheduled', reason: 'General checkup' },
+      { patientId: patients[2]._id, doctorId: doctor1._id, appointmentNo: 'APT-003', roomNo: '1', date: today, time: '11:00', status: 'completed', reason: 'Cardiac evaluation' },
+      { patientId: patients[3]._id, doctorId: doctor2._id, appointmentNo: 'APT-004', roomNo: '2', date: tomorrow, time: '09:00', status: 'scheduled', reason: 'Migraine treatment' },
+      { patientId: patients[4]._id, doctorId: doctor1._id, appointmentNo: 'APT-005', roomNo: '1', date: tomorrow, time: '09:30', status: 'scheduled', reason: 'Heart checkup' },
+      { patientId: patients[5]._id, doctorId: doctor2._id, appointmentNo: 'APT-006', roomNo: '2', date: tomorrow, time: '10:00', status: 'scheduled', reason: 'Routine checkup' },
     ];
 
     const appointments = await Appointment.insertMany(appointmentsData);
@@ -314,7 +314,7 @@ const seedDatabase = async () => {
           { name: 'Amlodipine', dosage: '5mg', frequency: 'Once daily', duration: '30 days', instructions: 'Take in the morning' },
           { name: 'Atorvastatin', dosage: '10mg', frequency: 'Once daily at night', duration: '30 days', instructions: 'Take after dinner' },
         ],
-        labTests: ['Complete Blood Count', 'Lipid Profile'],
+        labTests: ['CPC & ESR', 'Lipid Profile'],
         radiologyTests: [],
         notes: 'Low salt diet recommended',
         status: 'completed',
@@ -330,8 +330,8 @@ const seedDatabase = async () => {
           { name: 'Salbutamol Inhaler', dosage: '100mcg', frequency: 'As needed', duration: '30 days', instructions: 'Use during breathing difficulty' },
           { name: 'Montelukast', dosage: '10mg', frequency: 'Once daily at night', duration: '30 days', instructions: 'Take before sleep' },
         ],
-        labTests: ['Pulmonary Function Test'],
-        radiologyTests: ['Chest X-Ray'],
+        labTests: ['FBS'],
+        radiologyTests: ['Chest PA'],
         notes: 'Avoid dust and smoke',
         status: 'pending',
       },
@@ -358,11 +358,11 @@ const seedDatabase = async () => {
     // Create Lab Requests
     console.log('\nCreating lab requests...');
     const labRequestsData = [
-      { requestNo: 'LAB-2025-0001', patientId: patients[0]._id, patientNo: patients[0].patientNo, forceNo: patients[0].forceNo, test: 'Complete Blood Count', doctorId: doctor1._id, status: 'pending' },
-      { requestNo: 'LAB-2025-0002', patientId: patients[0]._id, patientNo: patients[0].patientNo, forceNo: patients[0].forceNo, test: 'Lipid Profile', doctorId: doctor1._id, status: 'pending' },
-      { requestNo: 'LAB-2025-0003', patientId: patients[1]._id, patientNo: patients[1].patientNo, forceNo: patients[1].forceNo, test: 'Pulmonary Function Test', doctorId: doctor2._id, status: 'completed', result: { fev1: '85%', fvc: '90%', ratio: '94%' } },
-      { requestNo: 'LAB-2025-0004', patientId: patients[2]._id, patientNo: patients[2].patientNo, test: 'Blood Sugar Fasting', doctorId: doctor1._id, status: 'in-progress' },
-      { requestNo: 'LAB-2025-0005', patientId: patients[4]._id, patientNo: patients[4].patientNo, forceNo: patients[4].forceNo, test: 'ECG', doctorId: doctor1._id, status: 'pending' },
+      { requestNo: 'LAB-2026-0001', patientId: patients[0]._id, patientNo: patients[0].patientNo, forceNo: patients[0].forceNo, test: 'CPC & ESR', doctorId: doctor1._id, status: 'pending' },
+      { requestNo: 'LAB-2026-0002', patientId: patients[0]._id, patientNo: patients[0].patientNo, forceNo: patients[0].forceNo, test: 'Lipid Profile', doctorId: doctor1._id, status: 'pending' },
+      { requestNo: 'LAB-2026-0003', patientId: patients[1]._id, patientNo: patients[1].patientNo, forceNo: patients[1].forceNo, test: 'FBS', doctorId: doctor2._id, status: 'completed', result: 'Normal - 95 mg/dL' },
+      { requestNo: 'LAB-2026-0004', patientId: patients[2]._id, patientNo: patients[2].patientNo, test: 'RBS', doctorId: doctor1._id, status: 'in-progress' },
+      { requestNo: 'LAB-2026-0005', patientId: patients[4]._id, patientNo: patients[4].patientNo, forceNo: patients[4].forceNo, test: 'Cholesterol', doctorId: doctor1._id, status: 'pending' },
     ];
 
     const labRequests = await LabRequest.insertMany(labRequestsData);
@@ -371,9 +371,9 @@ const seedDatabase = async () => {
     // Create Radiology Requests
     console.log('\nCreating radiology requests...');
     const radiologyRequestsData = [
-      { requestNo: 'RAD-2025-0001', patientId: patients[0]._id, patientNo: patients[0].patientNo, forceNo: patients[0].forceNo, testType: 'X-Ray Chest', doctorId: doctor1._id, status: 'pending' },
-      { requestNo: 'RAD-2025-0002', patientId: patients[1]._id, patientNo: patients[1].patientNo, forceNo: patients[1].forceNo, testType: 'Chest X-Ray', doctorId: doctor2._id, status: 'completed', report: { findings: 'Normal chest X-ray', conclusion: 'No abnormality detected' } },
-      { requestNo: 'RAD-2025-0003', patientId: patients[4]._id, patientNo: patients[4].patientNo, forceNo: patients[4].forceNo, testType: 'CT Scan Heart', doctorId: doctor1._id, status: 'in-progress' },
+      { requestNo: 'RAD-2026-0001', patientId: patients[0]._id, patientNo: patients[0].patientNo, forceNo: patients[0].forceNo, testType: 'Chest PA', doctorId: doctor1._id, status: 'pending' },
+      { requestNo: 'RAD-2026-0002', patientId: patients[1]._id, patientNo: patients[1].patientNo, forceNo: patients[1].forceNo, testType: 'Chest PA', doctorId: doctor2._id, status: 'completed', report: { findings: 'Normal chest X-ray', conclusion: 'No abnormality detected' } },
+      { requestNo: 'RAD-2026-0003', patientId: patients[4]._id, patientNo: patients[4].patientNo, forceNo: patients[4].forceNo, testType: 'L/Spine AP Lateral', doctorId: doctor1._id, status: 'in-progress' },
     ];
 
     const radiologyRequests = await RadiologyRequest.insertMany(radiologyRequestsData);
@@ -390,15 +390,14 @@ const seedDatabase = async () => {
         forceNo: patients[0].forceNo,
         patientName: `${patients[0].firstName} ${patients[0].lastName}`,
         items: [
-          { service: 'Consultation Fee', price: 1500, quantity: 1 },
-          { service: 'Blood Test (CBC)', price: 800, quantity: 1 },
-          { service: 'Lipid Profile', price: 1200, quantity: 1 },
+          { service: 'OPD Consultation Fee', price: 0, quantity: 1 },
+          { service: 'Lab Test - CPC & ESR', price: 250, quantity: 1 },
+          { service: 'Lab Test - Lipid Profile', price: 400, quantity: 1 },
         ],
-        total: 3500,
+        total: 650,
         discount: 0,
-        netAmount: 3500,
-        paymentStatus: patients[0].patientType !== 'CIVILIAN' ? 'auto-paid' : 'pending',
-        autoPayment: patients[0].patientType !== 'CIVILIAN',
+        netAmount: 650,
+        paymentStatus: patients[0].patientType !== 'CIVILIAN' ? 'paid' : 'pending',
       },
       {
         invoiceNo: 'INV-2025-002',
@@ -408,15 +407,13 @@ const seedDatabase = async () => {
         forceNo: patients[1].forceNo,
         patientName: `${patients[1].firstName} ${patients[1].lastName}`,
         items: [
-          { service: 'Consultation Fee', price: 1500, quantity: 1 },
-          { service: 'Chest X-Ray', price: 2000, quantity: 1 },
+          { service: 'OPD Consultation Fee', price: 30, quantity: 1 },
+          { service: 'X-Ray - Chest PA', price: 250, quantity: 1 },
         ],
-        total: 3500,
-        discount: 500,
-        netAmount: 3000,
-        paymentStatus: patients[1].patientType !== 'CIVILIAN' ? 'auto-paid' : 'paid',
-        autoPayment: patients[1].patientType !== 'CIVILIAN',
-        paymentMethod: patients[1].patientType !== 'CIVILIAN' ? 'Government' : 'Cash',
+        total: 280,
+        discount: 0,
+        netAmount: 280,
+        paymentStatus: patients[1].patientType !== 'CIVILIAN' ? 'paid' : 'pending',
       },
       {
         invoiceNo: 'INV-2025-003',
@@ -425,14 +422,13 @@ const seedDatabase = async () => {
         patientType: patients[2].patientType,
         patientName: `${patients[2].firstName} ${patients[2].lastName}`,
         items: [
-          { service: 'Consultation Fee', price: 1500, quantity: 1 },
+          { service: 'OPD Consultation Fee', price: 100, quantity: 1 },
           { service: 'Medicines', price: 450, quantity: 1 },
         ],
-        total: 1950,
+        total: 550,
         discount: 0,
-        netAmount: 1950,
+        netAmount: 550,
         paymentStatus: 'paid',
-        autoPayment: false,
         paymentMethod: 'Card',
       },
     ];
@@ -459,26 +455,38 @@ const seedDatabase = async () => {
       { name: 'Amoxicillin', strength: '500mg', quantity: 300, unit: 'capsules', minStock: 60, price: 15, category: 'pharmacy' },
       { name: 'Metformin', strength: '500mg', quantity: 450, unit: 'tablets', minStock: 90, price: 6, category: 'pharmacy' },
       { name: 'Salbutamol Inhaler', strength: '100mcg', quantity: 50, unit: 'inhalers', minStock: 10, price: 350, category: 'pharmacy' },
-      // Lab tests
-      { name: 'Complete Blood Count (CBC)', quantity: 999, unit: 'tests', minStock: 10, price: 500, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Blood Sugar Fasting', quantity: 999, unit: 'tests', minStock: 10, price: 300, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Blood Sugar Random', quantity: 999, unit: 'tests', minStock: 10, price: 300, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'HbA1c', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Lipid Profile', quantity: 999, unit: 'tests', minStock: 10, price: 700, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Liver Function Tests (LFT)', quantity: 999, unit: 'tests', minStock: 10, price: 900, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Renal Function Tests (RFT)', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Thyroid Function Tests (TFT)', quantity: 999, unit: 'tests', minStock: 10, price: 1200, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'Urine Routine Examination', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Lab Supplies', department: 'Laboratory' },
-      { name: 'ECG (Electrocardiogram)', quantity: 999, unit: 'tests', minStock: 10, price: 500, category: 'Lab Supplies', department: 'Laboratory' },
-      // Radiology tests
-      { name: 'X-Ray Chest (PA View)', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Radiology', department: 'General' },
-      { name: 'X-Ray Abdomen', quantity: 999, unit: 'tests', minStock: 10, price: 800, category: 'Radiology', department: 'General' },
-      { name: 'Ultrasound Abdomen', quantity: 999, unit: 'tests', minStock: 10, price: 1500, category: 'Radiology', department: 'General' },
-      { name: 'CT Scan Brain', quantity: 999, unit: 'tests', minStock: 10, price: 5000, category: 'Radiology', department: 'General' },
-      { name: 'CT Scan Chest', quantity: 999, unit: 'tests', minStock: 10, price: 5000, category: 'Radiology', department: 'General' },
-      { name: 'MRI Brain', quantity: 999, unit: 'tests', minStock: 10, price: 8000, category: 'Radiology', department: 'General' },
-      { name: 'MRI Spine (Lumbar)', quantity: 999, unit: 'tests', minStock: 10, price: 8000, category: 'Radiology', department: 'General' },
-      { name: 'Echocardiography', quantity: 999, unit: 'tests', minStock: 10, price: 3000, category: 'Radiology', department: 'General' },
+      // Lab tests (using ASF rates as base price)
+      { name: 'CPC & ESR', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'MPICT', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Hb %', quantity: 999, unit: 'tests', minStock: 10, price: 200, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'H.C.V & Hbs Ag', quantity: 999, unit: 'tests', minStock: 10, price: 350, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Urine D/R', quantity: 999, unit: 'tests', minStock: 10, price: 120, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Pregnancy Test', quantity: 999, unit: 'tests', minStock: 10, price: 120, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Stool DR', quantity: 999, unit: 'tests', minStock: 10, price: 100, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'FBS', quantity: 999, unit: 'tests', minStock: 10, price: 120, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'RBS', quantity: 999, unit: 'tests', minStock: 10, price: 120, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: "LFT's", quantity: 999, unit: 'tests', minStock: 10, price: 400, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'SGPT', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Dengue', quantity: 999, unit: 'tests', minStock: 10, price: 450, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'H Pylori (Stool)', quantity: 999, unit: 'tests', minStock: 10, price: 350, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'H Pylori (Blood)', quantity: 999, unit: 'tests', minStock: 10, price: 350, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Lipid Profile', quantity: 999, unit: 'tests', minStock: 10, price: 400, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Cholesterol', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Uric Acid', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Blood Grouping', quantity: 999, unit: 'tests', minStock: 10, price: 120, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'ALK Phos', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'T.G', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'HDL', quantity: 999, unit: 'tests', minStock: 10, price: 200, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Urea', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Creatinine', quantity: 999, unit: 'tests', minStock: 10, price: 150, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'Platelets', quantity: 999, unit: 'tests', minStock: 10, price: 200, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'HIV', quantity: 999, unit: 'tests', minStock: 10, price: 300, category: 'Lab Supplies', department: 'Laboratory' },
+      { name: 'MP', quantity: 999, unit: 'tests', minStock: 10, price: 100, category: 'Lab Supplies', department: 'Laboratory' },
+      // Radiology tests (using ASF rates as base price)
+      { name: 'Chest PA', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Radiology', department: 'General' },
+      { name: 'L/Spine AP Lateral', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Radiology', department: 'General' },
+      { name: 'Knee Joint Lateral', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Radiology', department: 'General' },
+      { name: 'Cervical Spine AP Lateral', quantity: 999, unit: 'tests', minStock: 10, price: 250, category: 'Radiology', department: 'General' },
     ];
 
     const inventory = await Inventory.insertMany(inventoryData);
@@ -508,20 +516,20 @@ const seedDatabase = async () => {
     const wardPatients = await WardPatient.insertMany(wardPatientsData);
     console.log(`✓ Created ${wardPatients.length} ward patients`);
 
-    // Create Queue for Room 101 (Dr. Ahmad Khan)
+    // Create Queue for Room 1 (Dr. Ahmad Khan)
     console.log('\nCreating queues...');
     const cardiacQueueRoom101Data = {
       doctorId: doctor1._id,
       doctorName: doctor1.name,
       department: 'Cardiology',
-      roomNo: '101',
-      currentToken: 'T-101-1',
+      roomNo: '1',
+      currentToken: 'T-1-1',
       currentPatientIndex: 0,
       status: 'active',
       patients: [
         {
           appointmentId: undefined, // Will be set when appointments are created
-          tokenNo: 'T-101-1',
+          tokenNo: 'T-1-1',
           patientNo: patients[0].patientNo,
           patientName: `${patients[0].firstName} ${patients[0].lastName}`,
           forceNo: patients[0].forceNo,
@@ -531,7 +539,7 @@ const seedDatabase = async () => {
         },
         {
           appointmentId: undefined,
-          tokenNo: 'T-101-2',
+          tokenNo: 'T-1-2',
           patientNo: patients[1].patientNo,
           patientName: `${patients[1].firstName} ${patients[1].lastName}`,
           forceNo: patients[1].forceNo,
@@ -541,7 +549,7 @@ const seedDatabase = async () => {
         },
         {
           appointmentId: undefined,
-          tokenNo: 'T-101-3',
+          tokenNo: 'T-1-3',
           patientNo: patients[2].patientNo,
           patientName: `${patients[2].firstName} ${patients[2].lastName}`,
           forceNo: patients[2].forceNo || '',
@@ -552,19 +560,19 @@ const seedDatabase = async () => {
       ],
     };
 
-    // Create Queue for Room 102 (Dr. Fatima Bibi)
+    // Create Queue for Room 2 (Dr. Fatima Bibi)
     const medicinQueueRoom102Data = {
       doctorId: doctor2._id,
       doctorName: doctor2.name,
       department: 'General Medicine',
-      roomNo: '102',
-      currentToken: 'T-102-1',
+      roomNo: '2',
+      currentToken: 'T-2-1',
       currentPatientIndex: 0,
       status: 'active',
       patients: [
         {
           appointmentId: undefined,
-          tokenNo: 'T-102-1',
+          tokenNo: 'T-2-1',
           patientNo: patients[3].patientNo,
           patientName: `${patients[3].firstName} ${patients[3].lastName}`,
           forceNo: patients[3].forceNo || '',
@@ -574,7 +582,7 @@ const seedDatabase = async () => {
         },
         {
           appointmentId: undefined,
-          tokenNo: 'T-102-2',
+          tokenNo: 'T-2-2',
           patientNo: patients[4].patientNo,
           patientName: `${patients[4].firstName} ${patients[4].lastName}`,
           forceNo: patients[4].forceNo,
@@ -584,7 +592,7 @@ const seedDatabase = async () => {
         },
         {
           appointmentId: undefined,
-          tokenNo: 'T-102-3',
+          tokenNo: 'T-2-3',
           patientNo: patients[5].patientNo,
           patientName: `${patients[5].firstName} ${patients[5].lastName}`,
           forceNo: patients[5].forceNo || '',

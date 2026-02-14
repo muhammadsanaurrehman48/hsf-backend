@@ -9,13 +9,13 @@ const patientSchema = new mongoose.Schema(
         },
         patientType: {
             type: String,
-            enum: ['ASF', 'ASF_FAMILY', 'CIVILIAN'],
+            enum: ['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'CIVILIAN'],
             required: true,
         },
         forceNo: {
             type: String,
             required: function() {
-                return this.patientType === 'ASF' || this.patientType === 'ASF_FAMILY';
+                return this.patientType === 'ASF' || this.patientType === 'ASF_FAMILY' || this.patientType === 'ASF_SCHOOL';
             },
         },
         firstName: {

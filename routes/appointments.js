@@ -5,7 +5,9 @@ import Queue from '../models/Queue.js';
 import Patient from '../models/Patient.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import Invoice from '../models/Invoice.js';
 import { getDailyTokenNumber, generateOPDToken } from '../utils/tokenUtils.js';
+import { getOPDCharge } from '../utils/pricing.js';
 
 const router = express.Router();
 
@@ -240,6 +242,51 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       });
     }
     console.log('✅ [BACKEND] Notifications created for nurses');
+
+    // Generate OPD fee invoice based on patient type
+    let opdInvoice = null;
+    try {
+      const opdCharge = getOPDCharge(patient?.patientType);
+      const patientName = `${patient?.firstName} ${patient?.lastName}`;
+      const isFree = opdCharge === 0;
+
+      const invoiceCount = await Invoice.countDocuments();
+      const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+
+      opdInvoice = new Invoice({
+        invoiceNo,
+        patientId: patient._id,
+        patientNo: patient.patientNo,
+        patientType: patient.patientType,
+        forceNo: patient.forceNo,
+        patientName,
+        items: [{ service: 'OPD Consultation Fee', price: opdCharge, quantity: 1 }],
+        total: opdCharge,
+        discount: 0,
+        netAmount: opdCharge,
+        paymentStatus: isFree ? 'paid' : 'pending',
+      });
+      await opdInvoice.save();
+      console.log('✅ [BACKEND] OPD Invoice created:', invoiceNo, '| Rs.', opdCharge, '| Type:', patient.patientType);
+
+      // Notify receptionist about OPD invoice (only if there's a charge)
+      if (!isFree) {
+        const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
+        for (const staff of receptionists) {
+          await Notification.create({
+            userId: staff._id,
+            type: 'invoice_created',
+            title: 'OPD Fee Invoice',
+            message: `OPD token generated for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${opdCharge} - payment pending.`,
+            relatedId: opdInvoice._id,
+            relatedType: 'invoice',
+            actionUrl: '/receptionist/billing',
+          });
+        }
+      }
+    } catch (invoiceErr) {
+      console.error('⚠️ [BACKEND] Error creating OPD invoice:', invoiceErr);
+    }
 
     // Format the response to match the GET endpoint format
     const formattedAppointment = {

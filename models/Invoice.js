@@ -23,7 +23,7 @@ const invoiceSchema = new mongoose.Schema(
     },
     patientType: {
       type: String,
-      enum: ['ASF', 'ASF_FAMILY', 'CIVILIAN'],
+      enum: ['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'CIVILIAN'],
     },
     forceNo: {
       type: String,
@@ -47,12 +47,8 @@ const invoiceSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['pending', 'paid', 'partial', 'auto-paid'],
+      enum: ['pending', 'paid', 'partial'],
       default: 'pending',
-    },
-    autoPayment: {
-      type: Boolean,
-      default: false,
     },
     paymentMethod: {
       type: String,

@@ -6,6 +6,7 @@ import Invoice from '../models/Invoice.js';
 import Patient from '../models/Patient.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
+import { isMedicineFree } from '../utils/pricing.js';
 
 const router = express.Router();
 
@@ -146,7 +147,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
     try {
       const patient = prescription.patientId;
       const patientName = patient ? `${patient.firstName} ${patient.lastName}` : (prescription.mrNo || 'Unknown Patient');
-      const isAutoPayment = patient && (patient.patientType === 'ASF' || patient.patientType === 'ASF_FAMILY');
+      const medicinesFree = patient ? isMedicineFree(patient.patientType) : false;
 
       if (invoiceItems.length > 0) {
         const total = invoiceItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -162,10 +163,9 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           patientName,
           items: invoiceItems,
           total,
-          discount: isAutoPayment ? total : 0,
-          netAmount: isAutoPayment ? 0 : total,
-          paymentStatus: isAutoPayment ? 'auto-paid' : 'pending',
-          autoPayment: isAutoPayment || false,
+          discount: medicinesFree ? total : 0,
+          netAmount: medicinesFree ? 0 : total,
+          paymentStatus: medicinesFree ? 'paid' : 'pending',
         });
         await invoice.save();
         console.log('✅ [PHARMACY] Invoice created:', invoiceNo, 'for patient:', patientName, 'Total: Rs.', total);
@@ -177,7 +177,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
             userId: staff._id,
             type: 'invoice_created',
             title: 'New Pharmacy Invoice',
-            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${total})${isAutoPayment ? ' (Auto-Paid)' : ' - payment pending'}.`,
+            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${total})${medicinesFree ? ' (Free - ASF/Family/School)' : ' - payment pending'}.`,
             relatedId: invoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',

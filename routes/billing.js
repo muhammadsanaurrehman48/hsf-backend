@@ -25,7 +25,6 @@ router.get('/', verifyToken, checkRole(['billing', 'admin', 'receptionist']), as
       discount: i.discount,
       netAmount: i.netAmount,
       paymentStatus: i.paymentStatus,
-      autoPayment: i.autoPayment,
       paymentMethod: i.paymentMethod,
       createdAt: i.createdAt,
     }));
@@ -81,8 +80,8 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
     const invoiceCount = await Invoice.countDocuments();
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
-    // Auto-payment for ASF and ASF_FAMILY patients
-    const isAutoPayment = patient.patientType === 'ASF' || patient.patientType === 'ASF_FAMILY';
+    // Free for ASF Staff, charged for others
+    const isFree = patient.patientType === 'ASF';
 
     const invoice = new Invoice({
       invoiceNo,
@@ -93,16 +92,15 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
       patientName,
       items,
       total,
-      discount: discountAmount,
-      netAmount,
-      paymentStatus: isAutoPayment ? 'auto-paid' : 'pending',
-      autoPayment: isAutoPayment,
+      discount: isFree ? total : discountAmount,
+      netAmount: isFree ? 0 : netAmount,
+      paymentStatus: isFree ? 'paid' : 'pending',
     });
 
     await invoice.save();
     res.status(201).json({ 
       success: true, 
-      message: isAutoPayment ? 'Invoice created and auto-paid' : 'Invoice created',
+      message: isFree ? 'Invoice created (Free - ASF Staff)' : 'Invoice created',
       data: {
         id: invoice._id,
         ...invoice.toObject(),
