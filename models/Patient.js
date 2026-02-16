@@ -26,6 +26,22 @@ const patientSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        familyHead: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Patient',
+        },
+        relationToHead: {
+            type: String,
+            enum: ['self', 'spouse', 'child', 'parent', 'sibling', 'other'],
+            default: 'self',
+        },
+        householdId: {
+            type: String,
+        },
+        isHouseholdHead: {
+            type: Boolean,
+            default: true,
+        },
         gender: {
             type: String,
             enum: ['male', 'female', 'other'],

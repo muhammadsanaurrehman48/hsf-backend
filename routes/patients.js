@@ -4,6 +4,36 @@ import Patient from '../models/Patient.js';
 
 const router = express.Router();
 
+const mapPatient = (p) => ({
+  id: p._id,
+  patientNo: p.patientNo,
+  patientType: p.patientType,
+  forceNo: p.forceNo || '',
+  firstName: p.firstName,
+  lastName: p.lastName,
+  name: `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+  fullName: `${p.firstName} ${p.lastName}`,
+  mrNo: p.patientNo,
+  age: p.dateOfBirth ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear() : null,
+  gender: p.gender,
+  dateOfBirth: p.dateOfBirth || '',
+  bloodGroup: p.bloodGroup || '',
+  cnic: p.cnic || '',
+  phone: p.phone || '',
+  email: p.email || '',
+  address: p.address || '',
+  city: p.city || '',
+  householdId: p.householdId || '',
+  relationToHead: p.relationToHead || 'self',
+  familyHead: p.familyHead || null,
+  isHouseholdHead: p.isHouseholdHead,
+  emergencyContact: p.emergencyContact || {},
+  allergies: p.allergies || '',
+  existingConditions: p.existingConditions || '',
+  createdAt: p.createdAt,
+  updatedAt: p.updatedAt,
+});
+
 // Get all patients
 router.get('/', verifyToken, async (req, res) => {
   try {
@@ -11,83 +41,11 @@ router.get('/', verifyToken, async (req, res) => {
     const patients = await Patient.find().sort({ createdAt: -1 });
     console.log(`📋 [PATIENT] Found ${patients.length} patients`);
     
-    const patientsData = patients.map(p => ({
-      id: p._id,
-      patientNo: p.patientNo,
-      patientType: p.patientType,
-      forceNo: p.forceNo || '',
-      firstName: p.firstName,
-      lastName: p.lastName,
-      name: `${p.firstName || ''} ${p.lastName || ''}`.trim(),
-      fullName: `${p.firstName} ${p.lastName}`,
-      mrNo: p.patientNo,
-      age: p.dateOfBirth ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear() : null,
-      gender: p.gender,
-      dateOfBirth: p.dateOfBirth || '',
-      bloodGroup: p.bloodGroup || '',
-      cnic: p.cnic || '',
-      phone: p.phone || '',
-      email: p.email || '',
-      address: p.address || '',
-      city: p.city || '',
-      emergencyContact: p.emergencyContact || {},
-      allergies: p.allergies || '',
-      existingConditions: p.existingConditions || '',
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-    }));
+    const patientsData = patients.map(mapPatient);
     
     res.json({ success: true, data: patientsData });
   } catch (err) {
     console.error('❌ [PATIENT] Error fetching patients:', err);
-    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
-  }
-});
-
-// Get patient by ID
-router.get('/:patientId', verifyToken, async (req, res) => {
-  try {
-    console.log('👤 [PATIENT] Fetching patient:', req.params.patientId);
-    const patient = await Patient.findById(req.params.patientId);
-    
-    if (!patient) {
-      console.error('❌ [PATIENT] Patient not found:', req.params.patientId);
-      return res.status(404).json({ success: false, message: 'Patient not found' });
-    }
-
-    const patientData = {
-      id: patient._id,
-      patientNo: patient.patientNo,
-      patientType: patient.patientType,
-      forceNo: patient.forceNo || '',
-      firstName: patient.firstName,
-      lastName: patient.lastName,
-      name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
-      fullName: `${patient.firstName} ${patient.lastName}`,
-      mrNo: patient.patientNo,
-      age: patient.dateOfBirth ? new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear() : null,
-      gender: patient.gender,
-      dateOfBirth: patient.dateOfBirth || '',
-      bloodGroup: patient.bloodGroup || '',
-      cnic: patient.cnic || '',
-      phone: patient.phone || '',
-      email: patient.email || '',
-      address: patient.address || '',
-      city: patient.city || '',
-      emergencyContact: patient.emergencyContact || {},
-      allergies: patient.allergies || '',
-      existingConditions: patient.existingConditions || '',
-      createdAt: patient.createdAt,
-      updatedAt: patient.updatedAt,
-    };
-
-    console.log('✅ [PATIENT] Patient fetched:', patientData.patientNo);
-    res.json({ 
-      success: true, 
-      data: patientData
-    });
-  } catch (err) {
-    console.error('❌ [PATIENT] Error fetching patient:', err);
     res.status(500).json({ success: false, message: 'Server error: ' + err.message });
   }
 });
@@ -113,34 +71,42 @@ router.get('/search/query', verifyToken, async (req, res) => {
 
     console.log(`🔍 [PATIENT] Found ${patients.length} matching patients`);
 
-    const results = patients.map(p => ({
-      id: p._id,
-      patientNo: p.patientNo,
-      patientType: p.patientType,
-      forceNo: p.forceNo || '',
-      firstName: p.firstName,
-      lastName: p.lastName,
-      name: `${p.firstName || ''} ${p.lastName || ''}`.trim(),
-      fullName: `${p.firstName} ${p.lastName}`,
-      mrNo: p.patientNo,
-      age: p.dateOfBirth ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear() : null,
-      gender: p.gender,
-      dateOfBirth: p.dateOfBirth || '',
-      bloodGroup: p.bloodGroup || '',
-      cnic: p.cnic || '',
-      phone: p.phone || '',
-      email: p.email || '',
-      address: p.address || '',
-      city: p.city || '',
-      emergencyContact: p.emergencyContact || {},
-      allergies: p.allergies || '',
-      existingConditions: p.existingConditions || '',
-      createdAt: p.createdAt,
-    }));
+    const results = patients.map(mapPatient);
 
     res.json({ success: true, data: results });
   } catch (err) {
     console.error('❌ [PATIENT] Error searching patients:', err);
+    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+  }
+});
+
+// Get patient by ID
+router.get('/:patientId', verifyToken, async (req, res) => {
+  try {
+    console.log('👤 [PATIENT] Fetching patient:', req.params.patientId);
+    const patient = await Patient.findById(req.params.patientId);
+    
+    if (!patient) {
+      console.error('❌ [PATIENT] Patient not found:', req.params.patientId);
+      return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+
+    const patientData = mapPatient(patient);
+
+    let family = [];
+    if (patient.householdId) {
+      const householdMembers = await Patient.find({ householdId: patient.householdId }).sort({ createdAt: -1 });
+      family = householdMembers.map(mapPatient);
+    }
+
+    console.log('✅ [PATIENT] Patient fetched:', patientData.patientNo);
+    res.json({ 
+      success: true, 
+      data: patientData,
+      family,
+    });
+  } catch (err) {
+    console.error('❌ [PATIENT] Error fetching patient:', err);
     res.status(500).json({ success: false, message: 'Server error: ' + err.message });
   }
 });
@@ -164,15 +130,16 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
       emergencyContact,
       allergies,
       existingConditions,
+      familyMembers,
     } = req.body;
 
     // Validate patient type
-    if (!patientType || !['ASF', 'ASF_FAMILY', 'CIVILIAN'].includes(patientType)) {
+    if (!patientType || !['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'CIVILIAN'].includes(patientType)) {
       return res.status(400).json({ success: false, message: 'Invalid patient type' });
     }
 
-    // Force No is required for ASF and ASF_FAMILY
-    if ((patientType === 'ASF' || patientType === 'ASF_FAMILY') && !forceNo) {
+    // Force No is required for ASF, ASF_FAMILY, ASF_SCHOOL
+    if ((patientType === 'ASF' || patientType === 'ASF_FAMILY' || patientType === 'ASF_SCHOOL') && !forceNo) {
       return res.status(400).json({ success: false, message: 'Force No required for ASF patients' });
     }
 
@@ -181,7 +148,10 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
     }
 
     const patientCount = await Patient.countDocuments();
-    const patientNo = `PAT-${String(patientCount + 1001).padStart(6, '0')}`;
+    const baseNumber = patientCount + 1001;
+    const patientNo = `PAT-${String(baseNumber).padStart(6, '0')}`;
+
+    const householdId = patientNo;
 
     const newPatient = new Patient({
       patientNo,
@@ -200,41 +170,78 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
       emergencyContact,
       allergies,
       existingConditions,
+      householdId,
+      relationToHead: 'self',
+      familyHead: null,
+      isHouseholdHead: true,
     });
 
     await newPatient.save();
 
-    const patientData = {
-      id: newPatient._id,
-      patientNo: newPatient.patientNo,
-      patientType: newPatient.patientType,
-      forceNo: newPatient.forceNo || '',
-      firstName: newPatient.firstName,
-      lastName: newPatient.lastName,
-      name: `${newPatient.firstName || ''} ${newPatient.lastName || ''}`.trim(),
-      fullName: `${newPatient.firstName} ${newPatient.lastName}`,
-      mrNo: newPatient.patientNo,
-      age: newPatient.dateOfBirth ? new Date().getFullYear() - new Date(newPatient.dateOfBirth).getFullYear() : null,
-      gender: newPatient.gender,
-      dateOfBirth: newPatient.dateOfBirth || '',
-      bloodGroup: newPatient.bloodGroup || '',
-      cnic: newPatient.cnic || '',
-      phone: newPatient.phone || '',
-      email: newPatient.email || '',
-      address: newPatient.address || '',
-      city: newPatient.city || '',
-      emergencyContact: newPatient.emergencyContact || {},
-      allergies: newPatient.allergies || '',
-      existingConditions: newPatient.existingConditions || '',
-      createdAt: newPatient.createdAt,
-    };
+    const createdFamilyMembers = [];
+    if (Array.isArray(familyMembers) && patientType === 'ASF') {
+      const usableFamily = familyMembers.filter((fm) => {
+        return fm.name || fm.gender || fm.dateOfBirth || fm.bloodGroup || fm.relationToHead || fm.phone || fm.cnic;
+      });
+
+      if (usableFamily.length > 0) {
+        let counter = baseNumber;
+        const toInsert = [];
+        for (const fm of usableFamily) {
+          const fullName = (fm.name || `${fm.firstName || ''} ${fm.lastName || ''}`).trim();
+          if (!fullName) {
+            return res.status(400).json({ success: false, message: 'Family member name is required' });
+          }
+          const [fmFirst, ...fmRest] = fullName.split(/\s+/);
+          const fmLast = fmRest.join(' ') || fmFirst;
+
+          if (!fm.gender || !fm.dateOfBirth || !fm.bloodGroup || !fm.relationToHead) {
+            return res.status(400).json({ success: false, message: 'Family member is missing required fields' });
+          }
+
+          counter += 1;
+          const fmPatientNo = `PAT-${String(counter).padStart(6, '0')}`;
+
+          toInsert.push({
+            patientNo: fmPatientNo,
+            patientType: 'ASF_FAMILY',
+            forceNo,
+            firstName: fmFirst,
+            lastName: fmLast,
+            gender: fm.gender,
+            dateOfBirth: fm.dateOfBirth,
+            bloodGroup: fm.bloodGroup,
+            cnic: fm.cnic,
+            phone: fm.phone,
+            email: fm.email,
+            address: fm.address || address,
+            city: fm.city || city,
+            emergencyContact: fm.emergencyContact,
+            allergies: fm.allergies,
+            existingConditions: fm.existingConditions,
+            householdId,
+            relationToHead: fm.relationToHead,
+            familyHead: newPatient._id,
+            isHouseholdHead: false,
+          });
+        }
+
+        if (toInsert.length > 0) {
+          const inserted = await Patient.insertMany(toInsert);
+          createdFamilyMembers.push(...inserted.map(mapPatient));
+        }
+      }
+    }
+
+    const patientData = mapPatient(newPatient);
 
     console.log('✅ [PATIENT] Patient created successfully:', patientData.patientNo);
     
     res.status(201).json({ 
       success: true, 
       message: 'Patient registered successfully', 
-      data: patientData
+      data: patientData,
+      family: createdFamilyMembers,
     });
   } catch (err) {
     console.error('❌ [PATIENT] Error creating patient:', err);
@@ -269,31 +276,7 @@ router.put('/:patientId', verifyToken, checkRole(['receptionist', 'admin', 'doct
 
     console.log('✅ [PATIENT] Patient updated successfully:', patientId);
     
-    const responseData = {
-      id: patient._id,
-      patientNo: patient.patientNo,
-      patientType: patient.patientType,
-      forceNo: patient.forceNo || '',
-      firstName: patient.firstName,
-      lastName: patient.lastName,
-      name: `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
-      fullName: `${patient.firstName} ${patient.lastName}`,
-      mrNo: patient.patientNo,
-      age: patient.dateOfBirth ? new Date().getFullYear() - new Date(patient.dateOfBirth).getFullYear() : null,
-      gender: patient.gender,
-      dateOfBirth: patient.dateOfBirth || '',
-      bloodGroup: patient.bloodGroup || '',
-      cnic: patient.cnic || '',
-      phone: patient.phone || '',
-      email: patient.email || '',
-      address: patient.address || '',
-      city: patient.city || '',
-      emergencyContact: patient.emergencyContact || {},
-      allergies: patient.allergies || '',
-      existingConditions: patient.existingConditions || '',
-      createdAt: patient.createdAt,
-      updatedAt: patient.updatedAt,
-    };
+    const responseData = mapPatient(patient);
 
     res.json({ 
       success: true, 
