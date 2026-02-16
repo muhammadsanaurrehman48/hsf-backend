@@ -9,7 +9,7 @@ const patientSchema = new mongoose.Schema(
         },
         patientType: {
             type: String,
-            enum: ['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'CIVILIAN'],
+            enum: ['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'ASF_FOUNDATION', 'CIVILIAN'],
             required: true,
         },
         forceNo: {

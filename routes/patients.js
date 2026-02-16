@@ -134,7 +134,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
     } = req.body;
 
     // Validate patient type
-    if (!patientType || !['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'CIVILIAN'].includes(patientType)) {
+    if (!patientType || !['ASF', 'ASF_FAMILY', 'ASF_SCHOOL', 'ASF_FOUNDATION', 'CIVILIAN'].includes(patientType)) {
       return res.status(400).json({ success: false, message: 'Invalid patient type' });
     }
 

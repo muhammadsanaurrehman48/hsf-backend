@@ -80,8 +80,8 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
     const invoiceCount = await Invoice.countDocuments();
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
-    // Free for ASF Staff, charged for others
-    const isFree = patient.patientType === 'ASF';
+    // Free for ASF Staff and ASF Family; others billed
+    const isFree = patient.patientType === 'ASF' || patient.patientType === 'ASF_FAMILY';
 
     const invoice = new Invoice({
       invoiceNo,

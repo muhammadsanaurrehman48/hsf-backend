@@ -16,6 +16,7 @@ router.get('/', verifyToken, checkRole(['admin']), async (req, res) => {
       department: u.department,
       phone: u.phone,
       avatar: u.avatar,
+      roomNo: u.roomNo,
     }));
     res.json({ success: true, data: userData });
   } catch (err) {
@@ -38,7 +39,8 @@ router.get('/:userId', verifyToken, async (req, res) => {
       role: user.role, 
       department: user.department, 
       phone: user.phone, 
-      avatar: user.avatar 
+      avatar: user.avatar,
+      roomNo: user.roomNo,
     };
     res.json({ success: true, data: userData });
   } catch (err) {
@@ -84,10 +86,14 @@ router.put('/profile/:userId', verifyToken, async (req, res) => {
 // Create new user (admin only)
 router.post('/', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    const { name, email, password, role, department, phone } = req.body;
+    const { name, email, password, role, department, phone, roomNo } = req.body;
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    if (role === 'doctor' && !roomNo) {
+      return res.status(400).json({ success: false, message: 'Room assignment is required for doctors' });
     }
 
     // Check if user already exists
@@ -103,6 +109,7 @@ router.post('/', verifyToken, checkRole(['admin']), async (req, res) => {
       role,
       department,
       phone,
+      roomNo: role === 'doctor' ? roomNo : undefined,
     });
 
     await newUser.save();
@@ -113,6 +120,7 @@ router.post('/', verifyToken, checkRole(['admin']), async (req, res) => {
       role: newUser.role,
       department: newUser.department,
       phone: newUser.phone,
+      roomNo: newUser.roomNo,
     };
 
     res.status(201).json({
@@ -129,7 +137,7 @@ router.post('/', verifyToken, checkRole(['admin']), async (req, res) => {
 // Update user (admin only)
 router.put('/:userId', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    const { name, email, role, department, phone } = req.body;
+    const { name, email, role, department, phone, roomNo } = req.body;
     const user = await User.findById(req.params.userId);
     
     if (!user) {
@@ -142,6 +150,13 @@ router.put('/:userId', verifyToken, checkRole(['admin']), async (req, res) => {
     if (department) user.department = department;
     if (phone) user.phone = phone;
 
+    const effectiveRole = role || user.role;
+    if (effectiveRole === 'doctor' && roomNo !== undefined) {
+      user.roomNo = roomNo;
+    } else if (role && role !== 'doctor') {
+      user.roomNo = '';
+    }
+
     await user.save();
 
     const userData = {
@@ -151,6 +166,7 @@ router.put('/:userId', verifyToken, checkRole(['admin']), async (req, res) => {
       role: user.role,
       department: user.department,
       phone: user.phone,
+      roomNo: user.roomNo,
     };
 
     res.json({
@@ -195,6 +211,7 @@ router.get('/role/doctor', verifyToken, async (req, res) => {
       avatar: d.avatar,
       slots: d.available_slots || 10,
       max_slots: d.max_slots || 10,
+      roomNo: d.roomNo,
     }));
     res.json({ success: true, data: doctorData });
   } catch (err) {

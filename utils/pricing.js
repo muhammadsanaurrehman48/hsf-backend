@@ -42,6 +42,7 @@ export const OPD_CHARGES = {
   'ASF':        0,     // Free for ASF Staff
   'ASF_FAMILY': 30,    // Rs. 30 for ASF Family
   'ASF_SCHOOL': 30,    // Rs. 30 for ASF School / ASFF
+  'ASF_FOUNDATION': 30, // Rs. 30 for ASF Foundation / School
   'CIVILIAN':   100,   // Rs. 100 for Private / Civilian
 };
 

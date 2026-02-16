@@ -42,6 +42,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    roomNo: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     available_slots: {
       type: Number,
       default: 10,
