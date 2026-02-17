@@ -20,12 +20,15 @@ router.get('/', verifyToken, checkRole(['billing', 'admin', 'receptionist']), as
       patientType: i.patientType || i.patientId?.patientType,
       forceNo: i.forceNo || i.patientId?.forceNo,
       patientName: i.patientName,
+      source: i.source || 'Manual',
       items: i.items,
       total: i.total,
       discount: i.discount,
       netAmount: i.netAmount,
+      amountPaid: i.amountPaid || 0,
       paymentStatus: i.paymentStatus,
       paymentMethod: i.paymentMethod,
+      transactionId: i.transactionId,
       createdAt: i.createdAt,
     }));
 
@@ -78,9 +81,12 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
     const invoiceCount = await Invoice.countDocuments();
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
-    // Free for ASF Staff and ASF Family; others billed
-    const isFree = patient.patientType === 'ASF' || patient.patientType === 'ASF_FAMILY';
-    const netAmount = isFree ? 0 : total;
+    // Free for all ASF-affiliated types
+    const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
+    const isFree = FREE_TYPES.includes(patient.patientType);
+    // Accept explicit discount from frontend, or auto-discount for free patients
+    const discount = isFree ? total : (req.body.discount != null ? Number(req.body.discount) : 0);
+    const netAmount = Math.max(total - discount, 0);
 
     const invoice = new Invoice({
       invoiceNo,
@@ -89,11 +95,13 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
       patientType: patient.patientType,
       forceNo: patient.forceNo,
       patientName,
+      source: req.body.source || 'Manual',
       items,
       total,
-      discount: 0,
+      discount,
       netAmount,
-      paymentStatus: isFree ? 'paid' : 'pending',
+      amountPaid: isFree ? netAmount : 0,
+      paymentStatus: netAmount === 0 ? 'paid' : 'pending',
     });
 
     await invoice.save();
@@ -119,10 +127,22 @@ router.put('/:invoiceId', verifyToken, checkRole(['billing', 'admin', 'reception
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
-    const { paymentStatus, paymentMethod, transactionId } = req.body;
+    const { paymentStatus, paymentMethod, transactionId, amountPaid, discount } = req.body;
     if (paymentStatus) invoice.paymentStatus = paymentStatus;
     if (paymentMethod) invoice.paymentMethod = paymentMethod;
     if (transactionId) invoice.transactionId = transactionId;
+    if (amountPaid != null) {
+      invoice.amountPaid = Number(amountPaid);
+      // Recalculate balance: if fully paid, mark as paid
+      const remaining = invoice.netAmount - invoice.amountPaid;
+      if (remaining <= 0 && !paymentStatus) {
+        invoice.paymentStatus = 'paid';
+      }
+    }
+    if (discount != null) {
+      invoice.discount = Number(discount);
+      invoice.netAmount = Math.max(invoice.total - invoice.discount, 0);
+    }
 
     await invoice.save();
     res.json({ 

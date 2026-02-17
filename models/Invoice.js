@@ -32,6 +32,11 @@ const invoiceSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    source: {
+      type: String,
+      enum: ['OPD', 'Pharmacy', 'Laboratory', 'Radiology', 'Manual'],
+      default: 'Manual',
+    },
     items: [invoiceItemSchema],
     total: {
       type: Number,
@@ -42,6 +47,10 @@ const invoiceSchema = new mongoose.Schema(
       default: 0,
     },
     netAmount: {
+      type: Number,
+      default: 0,
+    },
+    amountPaid: {
       type: Number,
       default: 0,
     },

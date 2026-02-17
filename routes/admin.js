@@ -6,6 +6,10 @@ import Patient from '../models/Patient.js';
 import Appointment from '../models/Appointment.js';
 import Invoice from '../models/Invoice.js';
 import Activity from '../models/Activity.js';
+import Prescription from '../models/Prescription.js';
+import LabRequest from '../models/LabRequest.js';
+import RadiologyRequest from '../models/RadiologyRequest.js';
+import Queue from '../models/Queue.js';
 
 const router = express.Router();
 
@@ -15,6 +19,12 @@ function getDateRange(period) {
   const start = new Date();
   
   switch(period) {
+    case 'today':
+      start.setHours(0, 0, 0, 0);
+      break;
+    case 'week':
+      start.setDate(start.getDate() - 7);
+      break;
     case '1month':
       start.setMonth(start.getMonth() - 1);
       break;
@@ -36,34 +46,75 @@ function getDateRange(period) {
 // Dashboard stats
 router.get('/stats', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    const [totalUsers, totalDepartments, totalPatients, totalAppointments, totalRevenue] = await Promise.all([
-      User.countDocuments(),
-      Department.countDocuments(),
-      Patient.countDocuments(),
-      Appointment.countDocuments(),
-      Invoice.aggregate([
-        { $group: { _id: null, total: { $sum: '$netAmount' } } }
-      ]).then(result => result.length > 0 ? result[0].total : 0)
-    ]);
-
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
+    const todayStr = todayStart.toISOString().split('T')[0];
 
-    const todayPatients = await Appointment.countDocuments({
-      date: { $gte: todayStart, $lte: todayEnd },
-      status: 'completed'
-    });
+    const [
+      totalUsers,
+      totalDepartments,
+      totalPatients,
+      totalAppointments,
+      totalPrescriptions,
+      totalLabRequests,
+      totalRadiologyRequests,
+      totalInvoices,
+      revenueAgg,
+      paidRevenueAgg,
+      pendingRevenueAgg,
+      todayAppointments,
+      todayRegistrations,
+      todayInvoices,
+      todayRevenueAgg,
+    ] = await Promise.all([
+      User.countDocuments(),
+      Department.countDocuments(),
+      Patient.countDocuments(),
+      Appointment.countDocuments(),
+      Prescription.countDocuments(),
+      LabRequest.countDocuments(),
+      RadiologyRequest.countDocuments(),
+      Invoice.countDocuments(),
+      Invoice.aggregate([{ $group: { _id: null, total: { $sum: '$netAmount' } } }]),
+      Invoice.aggregate([{ $match: { paymentStatus: 'paid' } }, { $group: { _id: null, total: { $sum: '$netAmount' } } }]),
+      Invoice.aggregate([{ $match: { paymentStatus: 'pending' } }, { $group: { _id: null, total: { $sum: '$netAmount' } } }]),
+      Appointment.countDocuments({
+        $or: [
+          { date: todayStr },
+          { createdAt: { $gte: todayStart, $lte: todayEnd } }
+        ]
+      }),
+      Patient.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd } }),
+      Invoice.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd } }),
+      Invoice.aggregate([
+        { $match: { createdAt: { $gte: todayStart, $lte: todayEnd } } },
+        { $group: { _id: null, total: { $sum: '$netAmount' } } }
+      ]),
+    ]);
+
+    const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].total : 0;
+    const paidRevenue = paidRevenueAgg.length > 0 ? paidRevenueAgg[0].total : 0;
+    const pendingRevenue = pendingRevenueAgg.length > 0 ? pendingRevenueAgg[0].total : 0;
+    const todayRevenue = todayRevenueAgg.length > 0 ? todayRevenueAgg[0].total : 0;
 
     const stats = {
       totalUsers,
       departments: totalDepartments,
-      todayPatients,
-      systemHealth: '98%',
+      todayPatients: todayAppointments,
+      todayRegistrations,
+      todayInvoices,
+      todayRevenue,
       totalPatients,
       totalAppointments,
-      totalRevenue: totalRevenue || 0,
+      totalPrescriptions,
+      totalLabRequests,
+      totalRadiologyRequests,
+      totalInvoices,
+      totalRevenue,
+      paidRevenue,
+      pendingRevenue,
     };
     res.json({ success: true, data: stats });
   } catch (err) {
@@ -228,8 +279,8 @@ router.get('/analytics', verifyToken, checkRole(['admin']), async (req, res) => 
     res.json({ 
       success: true, 
       data: {
-        patientData: patientData.length > 0 ? patientData : generateDummyPatientData(),
-        revenueData: revenueData.length > 0 ? revenueData : generateDummyRevenueData(),
+        patientData,
+        revenueData,
         departmentData,
         staffByRole
       }
@@ -262,11 +313,20 @@ router.get('/reports', verifyToken, checkRole(['admin']), async (req, res) => {
 
     const newPatients = await Patient.countDocuments({ createdAt: { $gte: start, $lte: end } });
 
+    // Get admitted patients from DB (WardPatients with active status)
+    let admittedPatients = 0;
+    try {
+      const WardPatient = (await import('../models/WardPatient.js')).default;
+      admittedPatients = await WardPatient.countDocuments({ status: { $in: ['admitted', 'active'] } });
+    } catch (e) {
+      admittedPatients = 0;
+    }
+
     const reports = {
       patientReports: {
         totalPatients,
         newPatients,
-        admittedPatients: 5,
+        admittedPatients,
       },
       appointmentReports: {
         totalAppointments,
@@ -292,25 +352,44 @@ router.get('/download-report', verifyToken, checkRole(['admin']), async (req, re
 
     if (reportType === 'patients') {
       const patients = await Patient.find().lean();
-      csvContent = 'ID,Name,Email,Age,Gender,Contact,Status,Created At\n';
+      csvContent = 'Patient No,First Name,Last Name,Patient Type,Force No,Gender,DOB,Phone,CNIC,Address,City,Created At\n';
       patients.forEach(p => {
-        csvContent += `"${p._id}","${p.name}","${p.email}","${p.age}","${p.gender}","${p.contact}","active","${p.createdAt}"\n`;
+        csvContent += `"${p.patientNo}","${p.firstName}","${p.lastName}","${p.patientType}","${p.forceNo || ''}","${p.gender || ''}","${p.dateOfBirth || ''}","${p.phone || ''}","${p.cnic || ''}","${p.address || ''}","${p.city || ''}","${p.createdAt}"\n`;
       });
       filename = 'patients_report.csv';
     } else if (reportType === 'appointments') {
-      const appointments = await Appointment.find().lean();
-      csvContent = 'ID,Patient,Doctor,DateTime,Type,Status,Department,Created At\n';
+      const appointments = await Appointment.find()
+        .populate('patientId', 'firstName lastName patientNo')
+        .populate('doctorId', 'name department')
+        .lean();
+      csvContent = 'Appointment No,Patient,Patient No,Doctor,Department,Room,Date,Time,Status,Created At\n';
       appointments.forEach(a => {
-        csvContent += `"${a._id}","${a.patientId}","${a.doctorId}","${a.date}","${a.type}","${a.status}","${a.department}","${a.createdAt}"\n`;
+        const patientName = a.patientId ? `${a.patientId.firstName} ${a.patientId.lastName}` : 'N/A';
+        csvContent += `"${a.appointmentNo}","${patientName}","${a.patientId?.patientNo || ''}","${a.doctorId?.name || ''}","${a.doctorId?.department || ''}","${a.roomNo}","${a.date}","${a.time}","${a.status}","${a.createdAt}"\n`;
       });
       filename = 'appointments_report.csv';
     } else if (reportType === 'revenue') {
-      const invoices = await Invoice.find().lean();
-      csvContent = 'ID,Patient,Amount,Status,Created At\n';
+      const invoices = await Invoice.find()
+        .populate('patientId', 'firstName lastName patientNo patientType')
+        .lean();
+      csvContent = 'Invoice No,Patient,Patient No,Type,Source,Total,Discount,Net Amount,Paid,Status,Payment Method,Created At\n';
       invoices.forEach(i => {
-        csvContent += `"${i._id}","${i.patientId}","${i.netAmount}","${i.paymentStatus}","${i.createdAt}"\n`;
+        csvContent += `"${i.invoiceNo}","${i.patientName}","${i.patientNo || ''}","${i.patientType || ''}","${i.source || 'Manual'}",${i.total},${i.discount || 0},${i.netAmount},${i.amountPaid || 0},"${i.paymentStatus}","${i.paymentMethod || ''}","${i.createdAt}"\n`;
       });
       filename = 'revenue_report.csv';
+    } else if (reportType === 'prescriptions') {
+      const prescriptions = await Prescription.find()
+        .populate('patientId', 'firstName lastName patientNo')
+        .populate('doctorId', 'name')
+        .lean();
+      csvContent = 'Rx No,Patient,Patient No,Doctor,Diagnosis,Medicines,Lab Tests,Status,Created At\n';
+      prescriptions.forEach(p => {
+        const patientName = p.patientId ? `${p.patientId.firstName} ${p.patientId.lastName}` : 'N/A';
+        const meds = (p.medicines || []).map(m => m.name).join('; ');
+        const labs = (p.labTests || []).join('; ');
+        csvContent += `"${p.rxNo}","${patientName}","${p.patientId?.patientNo || ''}","${p.doctorId?.name || ''}","${p.diagnosis}","${meds}","${labs}","${p.status}","${p.createdAt}"\n`;
+      });
+      filename = 'prescriptions_report.csv';
     } else {
       csvContent = 'Report Summary\n';
       const [users, patients, appointments] = await Promise.all([
@@ -333,24 +412,188 @@ router.get('/download-report', verifyToken, checkRole(['admin']), async (req, re
   }
 });
 
-// Dummy data generators for demo
-function generateDummyPatientData() {
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  return monthNames.map(month => ({
-    month,
-    opd: Math.floor(Math.random() * 600) + 400,
-    ipd: Math.floor(Math.random() * 100) + 50,
-    emergency: Math.floor(Math.random() * 150) + 80,
-  }));
-}
+// ===== Admin Full Access Endpoints =====
 
-function generateDummyRevenueData() {
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  return monthNames.map(month => ({
-    month,
-    revenue: Math.floor(Math.random() * 500000) + 800000,
-    expenses: Math.floor(Math.random() * 300000) + 600000,
-  }));
-}
+// Get all patients (admin overview)
+router.get('/patients', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { period } = req.query;
+    let filter = {};
+    if (period) {
+      const { start, end } = getDateRange(period);
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+    const patients = await Patient.find(filter).sort({ createdAt: -1 });
+    res.json({ success: true, data: patients, total: patients.length });
+  } catch (err) {
+    console.error('Error fetching admin patients:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get all appointments (admin overview)
+router.get('/appointments', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { period } = req.query;
+    let filter = {};
+    if (period) {
+      const { start, end } = getDateRange(period);
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+    const appointments = await Appointment.find(filter)
+      .populate('patientId', 'firstName lastName patientNo patientType forceNo')
+      .populate('doctorId', 'name department')
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: appointments, total: appointments.length });
+  } catch (err) {
+    console.error('Error fetching admin appointments:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get all prescriptions (admin overview)
+router.get('/prescriptions', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { period } = req.query;
+    let filter = {};
+    if (period) {
+      const { start, end } = getDateRange(period);
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+    const prescriptions = await Prescription.find(filter)
+      .populate('patientId', 'firstName lastName patientNo patientType forceNo')
+      .populate('doctorId', 'name department')
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: prescriptions, total: prescriptions.length });
+  } catch (err) {
+    console.error('Error fetching admin prescriptions:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get all lab requests (admin overview)
+router.get('/lab-requests', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { period } = req.query;
+    let filter = {};
+    if (period) {
+      const { start, end } = getDateRange(period);
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+    const labRequests = await LabRequest.find(filter)
+      .populate('patientId', 'firstName lastName patientNo forceNo')
+      .populate('doctorId', 'name department')
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: labRequests, total: labRequests.length });
+  } catch (err) {
+    console.error('Error fetching admin lab requests:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get all radiology requests (admin overview)
+router.get('/radiology-requests', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { period } = req.query;
+    let filter = {};
+    if (period) {
+      const { start, end } = getDateRange(period);
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+    const radiologyRequests = await RadiologyRequest.find(filter)
+      .populate('patientId', 'firstName lastName patientNo forceNo')
+      .populate('doctorId', 'name department')
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: radiologyRequests, total: radiologyRequests.length });
+  } catch (err) {
+    console.error('Error fetching admin radiology requests:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get all invoices (admin overview with period filter)
+router.get('/invoices', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const { period } = req.query;
+    let filter = {};
+    if (period) {
+      const { start, end } = getDateRange(period);
+      filter.createdAt = { $gte: start, $lte: end };
+    }
+    const invoices = await Invoice.find(filter)
+      .populate('patientId', 'firstName lastName patientNo patientType forceNo')
+      .sort({ createdAt: -1 });
+    
+    const totalRevenue = invoices.reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const paidRevenue = invoices.filter(i => i.paymentStatus === 'paid').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const pendingRevenue = invoices.filter(i => i.paymentStatus === 'pending').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    
+    res.json({ 
+      success: true, 
+      data: invoices, 
+      total: invoices.length,
+      summary: { totalRevenue, paidRevenue, pendingRevenue }
+    });
+  } catch (err) {
+    console.error('Error fetching admin invoices:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Get comprehensive summary (daily/weekly/monthly/annual)
+router.get('/summary', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const period = req.query.period || 'today';
+    const { start, end } = getDateRange(period);
+    const dateFilter = { createdAt: { $gte: start, $lte: end } };
+
+    const [patients, appointments, prescriptions, labRequests, radiologyRequests, invoices] = await Promise.all([
+      Patient.countDocuments(dateFilter),
+      Appointment.countDocuments(dateFilter),
+      Prescription.countDocuments(dateFilter),
+      LabRequest.countDocuments(dateFilter),
+      RadiologyRequest.countDocuments(dateFilter),
+      Invoice.find(dateFilter).lean(),
+    ]);
+
+    const totalRevenue = invoices.reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const paidRevenue = invoices.filter(i => i.paymentStatus === 'paid').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const pendingRevenue = invoices.filter(i => i.paymentStatus === 'pending').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const completedAppointments = await Appointment.countDocuments({ ...dateFilter, status: 'completed' });
+    const cancelledAppointments = await Appointment.countDocuments({ ...dateFilter, status: 'cancelled' });
+
+    // Revenue by source
+    const revenueBySource = {};
+    for (const inv of invoices) {
+      const src = inv.source || 'Manual';
+      if (!revenueBySource[src]) revenueBySource[src] = { total: 0, count: 0 };
+      revenueBySource[src].total += inv.netAmount || 0;
+      revenueBySource[src].count += 1;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        dateRange: { start, end },
+        patients,
+        appointments,
+        completedAppointments,
+        cancelledAppointments,
+        prescriptions,
+        labRequests,
+        radiologyRequests,
+        invoiceCount: invoices.length,
+        totalRevenue,
+        paidRevenue,
+        pendingRevenue,
+        revenueBySource,
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching summary:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 export default router;

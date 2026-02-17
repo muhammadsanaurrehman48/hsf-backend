@@ -157,6 +157,9 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
         const invoiceCount = await Invoice.countDocuments();
         const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
+        const discount = medicinesFree ? total : 0;
+        const netAmount = Math.max(total - discount, 0);
+
         const invoice = new Invoice({
           invoiceNo,
           patientId: patient?._id || prescription.patientId,
@@ -164,10 +167,12 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           patientType: patient?.patientType,
           forceNo: patient?.forceNo || prescription.forceNo,
           patientName,
+          source: 'Pharmacy',
           items: invoiceItems,
           total,
-          discount: 0,
-          netAmount: medicinesFree ? 0 : total,
+          discount,
+          netAmount,
+          amountPaid: 0,
           paymentStatus: medicinesFree ? 'paid' : 'pending',
         });
         await invoice.save();
@@ -179,8 +184,8 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           await Notification.create({
             userId: staff._id,
             type: 'invoice_created',
-            title: 'New Pharmacy Invoice',
-            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${total})${medicinesFree ? ' (Free - ASF/Family)' : ' - payment pending'}.`,
+            title: medicinesFree ? 'Pharmacy Dispensed (Free)' : 'New Pharmacy Invoice',
+            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${netAmount})${medicinesFree ? ' - Free (ASF Staff/Family). No payment required.' : ' - payment pending'}.`,
             relatedId: invoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',

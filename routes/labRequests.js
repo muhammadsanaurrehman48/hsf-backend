@@ -113,7 +113,11 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
         const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
         const total = testPrice;
-        const netAmount = total;
+        // Free for all ASF-affiliated types
+        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
+        const isFree = FREE_TYPES.includes(patient.patientType);
+        const discount = isFree ? total : 0;
+        const netAmount = Math.max(total - discount, 0);
 
         const invoice = new Invoice({
           invoiceNo,
@@ -122,10 +126,12 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
           patientType: patient.patientType,
           forceNo: patient.forceNo,
           patientName,
+          source: 'Laboratory',
           items: [{ service: `Lab Test - ${test}`, price: testPrice, quantity: 1 }],
           total,
-          discount: 0,
+          discount,
           netAmount,
+          amountPaid: isFree ? 0 : 0,
           paymentStatus: netAmount === 0 ? 'paid' : 'pending',
         });
         await invoice.save();

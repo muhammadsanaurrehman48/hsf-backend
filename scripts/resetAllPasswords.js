@@ -1,6 +1,3 @@
-// Script to reset ALL user passwords to a default
-// Run with: node scripts/resetAllPasswords.js [password]
-
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User from '../models/User.js';

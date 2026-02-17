@@ -260,6 +260,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
         patientType: patient.patientType,
         forceNo: patient.forceNo,
         patientName,
+        source: 'OPD',
         items: [{ service: 'OPD Consultation Fee', price: opdCharge, quantity: 1 }],
         total: opdCharge,
         discount: 0,

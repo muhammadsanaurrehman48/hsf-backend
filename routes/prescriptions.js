@@ -6,6 +6,8 @@ import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import LabRequest from '../models/LabRequest.js';
 import RadiologyRequest from '../models/RadiologyRequest.js';
+import Invoice from '../models/Invoice.js';
+import { getLabTestPrice, getRadiologyTestPrice } from '../utils/pricing.js';
 
 const router = express.Router();
 
@@ -166,6 +168,59 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
         });
       }
       console.log('✅ [BACKEND] Lab notifications created');
+
+      // Create invoices for lab tests and notify receptionist
+      if (patient) {
+        const patientName = `${patient.firstName} ${patient.lastName}`;
+        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
+        const isFree = FREE_TYPES.includes(patient.patientType);
+
+        for (const labReq of labRequestDocs) {
+          try {
+            const testPrice = getLabTestPrice(labReq.test, patient.patientType);
+            const invoiceCount = await Invoice.countDocuments();
+            const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+            const total = testPrice;
+            const discount = isFree ? total : 0;
+            const netAmount = Math.max(total - discount, 0);
+
+            const invoice = new Invoice({
+              invoiceNo,
+              patientId: patient._id,
+              patientNo: patient.patientNo,
+              patientType: patient.patientType,
+              forceNo: patient.forceNo,
+              patientName,
+              source: 'Laboratory',
+              items: [{ service: `Lab Test - ${labReq.test}`, price: testPrice, quantity: 1 }],
+              total,
+              discount,
+              netAmount,
+              amountPaid: 0,
+              paymentStatus: netAmount === 0 ? 'paid' : 'pending',
+            });
+            await invoice.save();
+            console.log('✅ [PRESCRIPTION] Lab invoice created:', invoiceNo, 'for', labReq.test, '| Rs.', testPrice);
+
+            // Notify receptionist/billing staff
+            const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
+            for (const staff of receptionists) {
+              await Notification.create({
+                userId: staff._id,
+                type: 'invoice_created',
+                title: 'New Lab Test Invoice',
+                message: `Lab test "${labReq.test}" requested by Dr. ${doctor?.name} for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${netAmount}${isFree ? ' (Free - ASF)' : ' - payment pending'}.`,
+                relatedId: invoice._id,
+                relatedType: 'invoice',
+                actionUrl: '/receptionist/billing',
+              });
+            }
+            console.log('🔔 [PRESCRIPTION] Notified', receptionists.length, 'receptionist/billing staff about lab invoice');
+          } catch (invoiceErr) {
+            console.error('⚠️ [PRESCRIPTION] Error creating lab invoice:', invoiceErr);
+          }
+        }
+      }
     }
 
     // Send notification to radiology staff if radiology tests requested + create RadiologyRequest documents
@@ -202,6 +257,59 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
         });
       }
       console.log('✅ [BACKEND] Radiology notifications created');
+
+      // Create invoices for radiology tests and notify receptionist
+      if (patient) {
+        const patientName = `${patient.firstName} ${patient.lastName}`;
+        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
+        const isFree = FREE_TYPES.includes(patient.patientType);
+
+        for (const testName of radiologyTests) {
+          try {
+            const testPrice = getRadiologyTestPrice(testName, patient.patientType);
+            const invoiceCount = await Invoice.countDocuments();
+            const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+            const total = testPrice;
+            const discount = isFree ? total : 0;
+            const netAmount = Math.max(total - discount, 0);
+
+            const invoice = new Invoice({
+              invoiceNo,
+              patientId: patient._id,
+              patientNo: patient.patientNo,
+              patientType: patient.patientType,
+              forceNo: patient.forceNo,
+              patientName,
+              source: 'Radiology',
+              items: [{ service: `X-Ray - ${testName}`, price: testPrice, quantity: 1 }],
+              total,
+              discount,
+              netAmount,
+              amountPaid: 0,
+              paymentStatus: netAmount === 0 ? 'paid' : 'pending',
+            });
+            await invoice.save();
+            console.log('✅ [PRESCRIPTION] Radiology invoice created:', invoiceNo, 'for', testName, '| Rs.', testPrice);
+
+            // Notify receptionist/billing staff
+            const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
+            for (const staff of receptionists) {
+              await Notification.create({
+                userId: staff._id,
+                type: 'invoice_created',
+                title: 'New Radiology Invoice',
+                message: `X-Ray "${testName}" requested by Dr. ${doctor?.name} for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${netAmount}${isFree ? ' (Free - ASF)' : ' - payment pending'}.`,
+                relatedId: invoice._id,
+                relatedType: 'invoice',
+                actionUrl: '/receptionist/billing',
+              });
+            }
+            console.log('🔔 [PRESCRIPTION] Notified', receptionists.length, 'receptionist/billing staff about radiology invoice');
+          } catch (invoiceErr) {
+            console.error('⚠️ [PRESCRIPTION] Error creating radiology invoice:', invoiceErr);
+          }
+        }
+      }
     }
 
     res.status(201).json({ 

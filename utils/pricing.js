@@ -52,11 +52,13 @@ export const OPD_CHARGES = {
  * @param {string} patientType - ASF, ASF_FAMILY, ASF_SCHOOL, or CIVILIAN
  * @returns {number} price
  */
+// All ASF-affiliated types
+const ASF_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
+
 export function getLabTestPrice(testName, patientType) {
   const pricing = LAB_TEST_PRICES[testName];
   if (!pricing) return 0;
-  const staffTypes = ['ASF', 'ASF_FAMILY'];
-  return staffTypes.includes(patientType) ? pricing.asf : pricing.pvt;
+  return ASF_TYPES.includes(patientType) ? pricing.asf : pricing.pvt;
 }
 
 /**
@@ -68,8 +70,7 @@ export function getLabTestPrice(testName, patientType) {
 export function getRadiologyTestPrice(testName, patientType) {
   const pricing = RADIOLOGY_TEST_PRICES[testName];
   if (!pricing) return 0;
-  const staffTypes = ['ASF', 'ASF_FAMILY'];
-  return staffTypes.includes(patientType) ? pricing.asf : pricing.pvt;
+  return ASF_TYPES.includes(patientType) ? pricing.asf : pricing.pvt;
 }
 
 /**
@@ -87,5 +88,5 @@ export function getOPDCharge(patientType) {
  * @returns {boolean}
  */
 export function isMedicineFree(patientType) {
-  return patientType === 'ASF' || patientType === 'ASF_FAMILY';
+  return ASF_TYPES.includes(patientType);
 }
