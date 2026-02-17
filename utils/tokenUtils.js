@@ -43,20 +43,25 @@ export const isToday = (dateToCheck) => {
 
 export const resetQueueAtMidnight = async (Queue) => {
   /**
-   * This function can be scheduled to run at midnight
-   * to clean up stale queue data or archive daily statistics
+   * Clears all patients from every queue (new day = fresh start).
+   * Called from server.js midnight scheduler.
    */
   try {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(23, 59, 59, 999);
+    const queues = await Queue.find({});
+    let totalCleared = 0;
 
-    // Archive or clean queues - implementation depends on requirements
-    console.log('🧹 [BACKEND] Queue cleanup scheduled for:', yesterday);
+    for (const queue of queues) {
+      if (queue.patients.length > 0) {
+        totalCleared += queue.patients.length;
+        queue.patients = [];
+        queue.currentToken = null;
+        queue.currentPatientIndex = 0;
+        await queue.save();
+      }
+    }
 
-    // You can implement queue archival here
-    // For now, just log that the function ran
-    return { success: true, message: 'Queue cleanup completed' };
+    console.log(`🧹 resetQueueAtMidnight: cleared ${totalCleared} patients from ${queues.length} queues`);
+    return { success: true, message: `Cleared ${totalCleared} patients` };
   } catch (error) {
     console.error('❌ [BACKEND] Error in resetQueueAtMidnight:', error);
     return { success: false, error: error.message };

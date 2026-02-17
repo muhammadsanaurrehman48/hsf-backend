@@ -37,6 +37,14 @@ router.get('/room/:roomNo', async (req, res) => {
       currentPatient = queue.patients[queue.currentPatientIndex];
     }
 
+    // Filter to only today's patients
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todaysPatients = queue.patients.filter(p => {
+      const created = p.createdAt ? new Date(p.createdAt) : null;
+      return created && created >= todayStart;
+    });
+
     const responseData = {
       id: queue._id,
       roomNo: queue.roomNo,
@@ -47,25 +55,15 @@ router.get('/room/:roomNo', async (req, res) => {
       currentToken: queue.currentToken,
       currentPatient: currentPatient && currentPatient.status !== 'completed' ? currentPatient.toObject ? currentPatient.toObject() : currentPatient : null,
       currentPatientIndex: queue.currentPatientIndex,
-      totalPatients: queue.patients.length,
-      waitingPatients: queue.patients.filter(p => p.status === 'waiting').length,
-      patients: queue.patients.map((p, index) => ({
+      totalPatients: todaysPatients.length,
+      waitingPatients: todaysPatients.filter(p => p.status === 'waiting').length,
+      patients: todaysPatients.map((p, index) => ({
         ...p.toObject ? p.toObject() : p,
         position: index + 1,
       })),
     };
 
-    console.log('✅ [QUEUE] Returning queue data:');
-    console.log('   Room:', responseData.roomNo);
-    console.log('   Doctor:', responseData.doctorName);
-    console.log('   Current Serving:', responseData.currentPatient?.patientName);
-    console.log('   Waiting Count:', responseData.waitingPatients);
-    console.log('   Total Count:', responseData.totalPatients);
-    console.log('   All Patients:', responseData.patients.map(p => ({
-      token: p.tokenNo,
-      name: p.patientName,
-      status: p.status,
-    })));
+    console.log('✅ [QUEUE] Room', responseData.roomNo, '| Doctor:', responseData.doctorName, '| Today:', responseData.totalPatients, 'patients |', responseData.waitingPatients, 'waiting');
 
     res.json({ success: true, data: responseData });
   } catch (err) {
@@ -75,34 +73,49 @@ router.get('/room/:roomNo', async (req, res) => {
 });
 
 // Get all active queues (with full patient details for OPD Entries page)
+// Only returns TODAY's patients — previous days are automatically excluded
 router.get('/', async (req, res) => {
   try {
     const queues = await Queue.find({ status: 'active' })
       .populate('doctorId', 'name department')
       .sort({ createdAt: -1 });
 
-    const data = queues.map(q => ({
-      id: q._id,
-      roomNo: q.roomNo,
-      doctorName: q.doctorName,
-      department: q.department,
-      status: q.status,
-      currentToken: q.currentToken,
-      totalPatients: q.patients.length,
-      waitingPatients: q.patients.filter(p => p.status === 'waiting').length,
-      patients: q.patients.map((p, index) => ({
-        _id: p._id,
-        appointmentId: p.appointmentId,
-        tokenNo: p.tokenNo,
-        patientNo: p.patientNo,
-        patientName: p.patientName,
-        forceNo: p.forceNo,
-        patientId: p.patientId,
-        status: p.status,
-        position: index + 1,
-        createdAt: p.createdAt,
-      })),
-    }));
+    // Today boundary
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const data = queues.map(q => {
+      // Filter to only today's patients
+      const todaysPatients = q.patients.filter(p => {
+        const created = p.createdAt ? new Date(p.createdAt) : null;
+        return created && created >= todayStart;
+      });
+
+      return {
+        id: q._id,
+        roomNo: q.roomNo,
+        doctorName: q.doctorName,
+        department: q.department,
+        status: q.status,
+        currentToken: q.currentToken,
+        totalPatients: todaysPatients.length,
+        waitingPatients: todaysPatients.filter(p => p.status === 'waiting').length,
+        patients: [...todaysPatients]
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+          .map((p, index) => ({
+            _id: p._id,
+            appointmentId: p.appointmentId,
+            tokenNo: p.tokenNo,
+            patientNo: p.patientNo,
+            patientName: p.patientName,
+            forceNo: p.forceNo,
+            patientId: p.patientId,
+            status: p.status,
+            position: index + 1,
+            createdAt: p.createdAt,
+          })),
+      };
+    });
 
     res.json({ success: true, data });
   } catch (err) {

@@ -85,7 +85,76 @@ const connectDB = async () => {
   }
 };
 
-connectDB();
+connectDB().then(async () => {
+  // Auto-cleanup: remove stale (non-today) patients from queues on server start
+  try {
+    const QueueModel = (await import('./models/Queue.js')).default;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const queues = await QueueModel.find({});
+    let staleRemoved = 0;
+    for (const queue of queues) {
+      const originalCount = queue.patients.length;
+      queue.patients = queue.patients.filter(p => {
+        const created = p.createdAt ? new Date(p.createdAt) : null;
+        return created && created >= todayStart;
+      });
+      const removed = originalCount - queue.patients.length;
+      if (removed > 0) {
+        staleRemoved += removed;
+        // Reset current token index if patients were removed
+        if (queue.patients.length === 0) {
+          queue.currentToken = null;
+          queue.currentPatientIndex = 0;
+        }
+        await queue.save();
+      }
+    }
+    if (staleRemoved > 0) {
+      console.log(`🧹 Auto-cleanup: removed ${staleRemoved} stale patient(s) from queues (previous days)`);
+    } else {
+      console.log('✓ Queues clean — no stale patients found');
+    }
+  } catch (cleanupErr) {
+    console.error('⚠️ Queue auto-cleanup error (non-fatal):', cleanupErr.message);
+  }
+});
+
+// Schedule midnight cleanup — clear queues automatically at 00:00
+const scheduleMidnightReset = () => {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setDate(midnight.getDate() + 1);
+  midnight.setHours(0, 0, 30, 0); // 00:00:30 to avoid edge cases
+  const msUntilMidnight = midnight.getTime() - now.getTime();
+
+  setTimeout(async () => {
+    console.log('🕛 [AUTO] Midnight queue cleanup triggered');
+    try {
+      const QueueModel = (await import('./models/Queue.js')).default;
+      const queues = await QueueModel.find({});
+      let cleared = 0;
+      for (const queue of queues) {
+        if (queue.patients.length > 0) {
+          cleared += queue.patients.length;
+          queue.patients = [];
+          queue.currentToken = null;
+          queue.currentPatientIndex = 0;
+          await queue.save();
+        }
+      }
+      console.log(`🧹 [AUTO] Midnight reset: cleared ${cleared} patients from ${queues.length} queues`);
+    } catch (err) {
+      console.error('❌ [AUTO] Midnight cleanup error:', err.message);
+    }
+    // Schedule next midnight
+    scheduleMidnightReset();
+  }, msUntilMidnight);
+
+  console.log(`⏰ Next automatic queue reset scheduled in ${Math.round(msUntilMidnight / 60000)} minutes`);
+};
+scheduleMidnightReset();
 
 // Routes
 app.use('/api/auth', authRoutes);
