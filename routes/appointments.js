@@ -12,10 +12,27 @@ import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 
 const router = express.Router();
 
-// Get all appointments
+// Get appointments — returns TODAY's only by default
+// Query params:
+//   ?all=true   → return every appointment (for admin/history)
+//   ?date=YYYY-MM-DD → return appointments for a specific date
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const appointments = await Appointment.find()
+    // Build date filter
+    const query = {};
+    if (req.query.all !== 'true') {
+      if (req.query.date) {
+        // Specific date requested
+        query.date = req.query.date;
+      } else {
+        // Default: today only
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        query.date = todayStr;
+      }
+    }
+
+    const appointments = await Appointment.find(query)
       .populate('patientId', 'firstName lastName patientNo forceNo patientType')
       .populate('doctorId', 'name department')
       .sort({ createdAt: -1 });
@@ -82,10 +99,15 @@ router.get('/:appointmentId', verifyToken, async (req, res) => {
   }
 });
 
-// Get appointments for a patient
+// Get appointments for a patient (today only by default, ?all=true for history)
 router.get('/patient/:patientId', verifyToken, async (req, res) => {
   try {
-    const appointments = await Appointment.find({ patientId: req.params.patientId })
+    const query = { patientId: req.params.patientId };
+    if (req.query.all !== 'true') {
+      const today = new Date();
+      query.date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    }
+    const appointments = await Appointment.find(query)
       .populate('doctorId', 'name department')
       .sort({ createdAt: -1 });
     res.json({ success: true, data: appointments });
@@ -95,10 +117,16 @@ router.get('/patient/:patientId', verifyToken, async (req, res) => {
   }
 });
 
-// Get appointments for a doctor
+// Get appointments for a doctor (today only by default, ?all=true for history)
 router.get('/doctor/:doctorId', verifyToken, async (req, res) => {
   try {
-    const appointments = await Appointment.find({ doctorId: req.params.doctorId })
+    const query = { doctorId: req.params.doctorId };
+    if (req.query.all !== 'true') {
+      const today = new Date();
+      query.date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    }
+
+    const appointments = await Appointment.find(query)
       .populate('patientId', 'firstName lastName patientNo forceNo patientType')
       .sort({ createdAt: -1 });
     
