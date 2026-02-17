@@ -6,6 +6,7 @@ import Notification from '../models/Notification.js';
 import Patient from '../models/Patient.js';
 import Invoice from '../models/Invoice.js';
 import { getRadiologyTestPrice } from '../utils/pricing.js';
+import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 
 const router = express.Router();
 
@@ -87,8 +88,18 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    const requestCount = await RadiologyRequest.countDocuments();
-    const requestNo = `RAD-${new Date().getFullYear()}-${String(requestCount + 1).padStart(4, '0')}`;
+    const year = new Date().getFullYear();
+    const lastRad = await RadiologyRequest.findOne(
+      { requestNo: { $regex: `^RAD-${year}-` } },
+      { requestNo: 1 },
+      { sort: { requestNo: -1 } }
+    );
+    let radSeq = 1;
+    if (lastRad?.requestNo) {
+      const m = lastRad.requestNo.match(/RAD-\d{4}-(\d+)/);
+      if (m) radSeq = parseInt(m[1], 10) + 1;
+    }
+    const requestNo = `RAD-${year}-${String(radSeq).padStart(4, '0')}`;
 
     const newRequest = new RadiologyRequest({
       requestNo,
@@ -104,18 +115,18 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
     await newRequest.save();
 
     // Generate invoice for this radiology test based on patient type
+    let radInvoice = null;
     try {
       const patient = await Patient.findById(patientId);
       if (patient) {
         const patientName = `${patient.firstName} ${patient.lastName}`;
         const testPrice = getRadiologyTestPrice(testType, patient.patientType);
 
-        const invoiceCount = await Invoice.countDocuments();
-        const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+        const invoiceNo = await generateInvoiceNo();
 
         const total = testPrice;
 
-        const invoice = new Invoice({
+        radInvoice = new Invoice({
           invoiceNo,
           patientId: patient._id,
           patientNo: patient.patientNo,
@@ -123,14 +134,14 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
           forceNo: patient.forceNo,
           patientName,
           source: 'Radiology',
-          items: [{ service: `X-Ray - ${testType}`, price: testPrice, quantity: 1 }],
+          items: [{ service: `X-Ray - ${testType}`, department: 'Radiology', price: testPrice, quantity: 1 }],
           total,
           discount: 0,
           netAmount: total,
           amountPaid: 0,
           paymentStatus: 'pending',
         });
-        await invoice.save();
+        await radInvoice.save();
         console.log('✅ [RADIOLOGY] Invoice created:', invoiceNo, 'for', testType, '| Rs.', testPrice, '| Patient:', patientName);
 
         // Notify receptionist/billing staff about the invoice
@@ -141,7 +152,7 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
             type: 'invoice_created',
             title: 'New Radiology Invoice',
             message: `X-Ray "${testType}" requested for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${total} - payment pending.`,
-            relatedId: invoice._id,
+            relatedId: radInvoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',
           });
@@ -158,6 +169,11 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
       data: {
         id: newRequest._id,
         ...newRequest.toObject(),
+        invoice: radInvoice ? {
+          invoiceNo: radInvoice.invoiceNo,
+          amount: radInvoice.netAmount,
+          paymentStatus: radInvoice.paymentStatus,
+        } : null,
       }
     });
   } catch (err) {

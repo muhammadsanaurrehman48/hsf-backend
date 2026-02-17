@@ -3,6 +3,7 @@ import { verifyToken, checkRole } from '../middleware/auth.js';
 import Invoice from '../models/Invoice.js';
 import Patient from '../models/Patient.js';
 import Inventory from '../models/Inventory.js';
+import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 import {
   LAB_TEST_PRICES,
   RADIOLOGY_TEST_PRICES,
@@ -276,8 +277,7 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
 
     const total = pricedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-    const invoiceCount = await Invoice.countDocuments();
-    const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+    const invoiceNo = await generateInvoiceNo();
 
     // Accept explicit discount from frontend (default 0)
     const discount = req.body.discount != null ? Number(req.body.discount) : 0;

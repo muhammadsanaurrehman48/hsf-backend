@@ -6,6 +6,7 @@ import Notification from '../models/Notification.js';
 import Patient from '../models/Patient.js';
 import Invoice from '../models/Invoice.js';
 import { getLabTestPrice } from '../utils/pricing.js';
+import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 
 const router = express.Router();
 
@@ -86,8 +87,18 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    const requestCount = await LabRequest.countDocuments();
-    const requestNo = `LAB-${new Date().getFullYear()}-${String(requestCount + 123).padStart(4, '0')}`;
+    const year = new Date().getFullYear();
+    const lastLab = await LabRequest.findOne(
+      { requestNo: { $regex: `^LAB-${year}-` } },
+      { requestNo: 1 },
+      { sort: { requestNo: -1 } }
+    );
+    let labSeq = 1;
+    if (lastLab?.requestNo) {
+      const m = lastLab.requestNo.match(/LAB-\d{4}-(\d+)/);
+      if (m) labSeq = parseInt(m[1], 10) + 1;
+    }
+    const requestNo = `LAB-${year}-${String(labSeq).padStart(4, '0')}`;
 
     const newRequest = new LabRequest({
       requestNo,
@@ -103,18 +114,18 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
     await newRequest.save();
 
     // Generate invoice for this lab test based on patient type
+    let labInvoice = null;
     try {
       const patient = await Patient.findById(patientId);
       if (patient) {
         const patientName = `${patient.firstName} ${patient.lastName}`;
         const testPrice = getLabTestPrice(test, patient.patientType);
 
-        const invoiceCount = await Invoice.countDocuments();
-        const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+        const invoiceNo = await generateInvoiceNo();
 
         const total = testPrice;
 
-        const invoice = new Invoice({
+        labInvoice = new Invoice({
           invoiceNo,
           patientId: patient._id,
           patientNo: patient.patientNo,
@@ -122,14 +133,14 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
           forceNo: patient.forceNo,
           patientName,
           source: 'Laboratory',
-          items: [{ service: `Lab Test - ${test}`, price: testPrice, quantity: 1 }],
+          items: [{ service: `Lab Test - ${test}`, department: 'Laboratory', price: testPrice, quantity: 1 }],
           total,
           discount: 0,
           netAmount: total,
           amountPaid: 0,
           paymentStatus: 'pending',
         });
-        await invoice.save();
+        await labInvoice.save();
         console.log('✅ [LAB] Invoice created:', invoiceNo, 'for', test, '| Rs.', testPrice, '| Patient:', patientName);
 
         // Notify receptionist/billing staff about the invoice
@@ -140,7 +151,7 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
             type: 'invoice_created',
             title: 'New Lab Test Invoice',
             message: `Lab test "${test}" requested for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${total} - payment pending.`,
-            relatedId: invoice._id,
+            relatedId: labInvoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',
           });
@@ -157,6 +168,11 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
       data: {
         id: newRequest._id,
         ...newRequest.toObject(),
+        invoice: labInvoice ? {
+          invoiceNo: labInvoice.invoiceNo,
+          amount: labInvoice.netAmount,
+          paymentStatus: labInvoice.paymentStatus,
+        } : null,
       }
     });
   } catch (err) {

@@ -8,6 +8,7 @@ import User from '../models/User.js';
 import Invoice from '../models/Invoice.js';
 import { getDailyTokenNumber, generateOPDToken } from '../utils/tokenUtils.js';
 import { getOPDCharge } from '../utils/pricing.js';
+import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 
 const router = express.Router();
 
@@ -249,8 +250,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       const opdCharge = getOPDCharge(patient?.patientType);
       const patientName = `${patient?.firstName} ${patient?.lastName}`;
 
-      const invoiceCount = await Invoice.countDocuments();
-      const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+      const invoiceNo = await generateInvoiceNo();
 
       opdInvoice = new Invoice({
         invoiceNo,
@@ -260,7 +260,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
         forceNo: patient.forceNo,
         patientName,
         source: 'OPD',
-        items: [{ service: 'OPD Consultation Fee', price: opdCharge, quantity: 1 }],
+        items: [{ service: 'OPD Consultation Fee', department: 'OPD', price: opdCharge, quantity: 1 }],
         total: opdCharge,
         discount: 0,
         netAmount: opdCharge,

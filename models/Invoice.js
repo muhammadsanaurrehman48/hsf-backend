@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const invoiceItemSchema = new mongoose.Schema({
   service: String,
+  department: String,
   price: Number,
   quantity: Number,
 });
