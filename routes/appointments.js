@@ -563,21 +563,103 @@ router.post('/:appointmentId/assign-token', verifyToken, checkRole(['receptionis
   }
 });
 
-// Clear all appointments (for testing/reset)
+// Daily reset: archive today's appointments (mark completed) and clear queues
+// Appointments stay in database for historical records; only queues are cleared
+router.post('/admin/daily-reset', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    console.log('🔄 [BACKEND] Running daily appointment reset...');
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayStr = todayStart.toISOString().split('T')[0];
+
+    // Mark all active (scheduled/vitals_recorded) appointments as completed
+    const archiveResult = await Appointment.updateMany(
+      {
+        status: { $in: ['scheduled', 'vitals_recorded'] },
+        $or: [
+          { date: todayStr },
+          { date: { $lt: todayStr } },
+          { createdAt: { $lte: todayEnd } }
+        ]
+      },
+      { $set: { status: 'completed' } }
+    );
+    console.log('📋 [BACKEND] Archived', archiveResult.modifiedCount, 'appointments (marked as completed)');
+
+    // Clear queue patients but keep queue structure
+    const queues = await Queue.find({});
+    let clearedPatients = 0;
+    for (const queue of queues) {
+      clearedPatients += queue.patients.length;
+      queue.patients = [];
+      queue.currentToken = null;
+      queue.currentPatientIndex = 0;
+      await queue.save();
+    }
+    console.log('🧹 [BACKEND] Cleared', clearedPatients, 'patients from', queues.length, 'queues');
+
+    // Restore all doctors' slots to max
+    const doctors = await User.find({ role: 'doctor' });
+    for (const doctor of doctors) {
+      doctor.available_slots = doctor.max_slots || 10;
+      await doctor.save();
+    }
+    console.log('🎫 [BACKEND] Reset slots for', doctors.length, 'doctors');
+
+    res.json({
+      success: true,
+      message: 'Daily reset completed. Appointments archived (not deleted), queues cleared, slots restored.',
+      archivedAppointments: archiveResult.modifiedCount,
+      clearedQueues: queues.length,
+      clearedQueuePatients: clearedPatients,
+      doctorSlotsReset: doctors.length,
+    });
+  } catch (err) {
+    console.error('❌ [BACKEND] Error in daily reset:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Legacy clear all appointments (keeps for backward compat but now archives instead of deleting)
 router.delete('/admin/clear-all', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    console.log('🗑️ [BACKEND] Clearing all appointments...');
-    
-    const deleteResult = await Appointment.deleteMany({});
-    const queueDeleteResult = await Queue.deleteMany({});
-    
-    console.log('✅ [BACKEND] Deleted', deleteResult.deletedCount, 'appointments and', queueDeleteResult.deletedCount, 'queue entries');
-    
-    res.json({ 
-      success: true, 
-      message: 'All appointments cleared',
-      deletedAppointments: deleteResult.deletedCount,
-      deletedQueues: queueDeleteResult.deletedCount
+    console.log('🔄 [BACKEND] Archiving all appointments (soft reset)...');
+
+    // Archive: mark all non-completed/non-cancelled appointments as completed
+    const archiveResult = await Appointment.updateMany(
+      { status: { $in: ['scheduled', 'vitals_recorded'] } },
+      { $set: { status: 'completed' } }
+    );
+
+    // Clear queues (patients array) but keep queue structure
+    const queues = await Queue.find({});
+    let clearedPatients = 0;
+    for (const queue of queues) {
+      clearedPatients += queue.patients.length;
+      queue.patients = [];
+      queue.currentToken = null;
+      queue.currentPatientIndex = 0;
+      await queue.save();
+    }
+
+    // Restore doctor slots
+    const doctors = await User.find({ role: 'doctor' });
+    for (const doctor of doctors) {
+      doctor.available_slots = doctor.max_slots || 10;
+      await doctor.save();
+    }
+
+    console.log('✅ [BACKEND] Archived', archiveResult.modifiedCount, 'appointments, cleared', clearedPatients, 'queue patients');
+
+    res.json({
+      success: true,
+      message: 'All appointments archived (not deleted). Queues cleared. Slots restored.',
+      archivedAppointments: archiveResult.modifiedCount,
+      clearedQueues: queues.length,
+      clearedQueuePatients: clearedPatients,
     });
   } catch (err) {
     console.error('❌ [BACKEND] Error clearing appointments:', err);

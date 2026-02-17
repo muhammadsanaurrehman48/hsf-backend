@@ -157,24 +157,95 @@ router.get('/health', verifyToken, checkRole(['admin']), async (req, res) => {
   }
 });
 
-// Get billing overview
+// Get billing overview with revenue breakdown by source
 router.get('/billing-overview', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    const invoices = await Invoice.find();
-    
-    const totalRevenue = invoices.reduce((sum, i) => sum + (i.netAmount || 0), 0);
-    const pendingPayments = invoices
-      .filter(i => i.paymentStatus === 'pending')
-      .reduce((sum, i) => sum + (i.netAmount || 0), 0);
-    const completedPayments = invoices
-      .filter(i => i.paymentStatus === 'paid')
-      .reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const period = req.query.period || '1month';
+    const { start, end } = getDateRange(period);
+    const dateFilter = { createdAt: { $gte: start, $lte: end } };
+
+    // Get all invoices for the period
+    const invoices = await Invoice.find(dateFilter).lean();
+    // Get all invoices overall (for totals)
+    const allInvoices = await Invoice.find().lean();
+
+    // Period totals
+    const periodRevenue = invoices.reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const periodCollected = invoices.filter(i => i.paymentStatus === 'paid').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const periodPending = invoices.filter(i => i.paymentStatus !== 'paid').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+
+    // All-time totals
+    const totalRevenue = allInvoices.reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const totalCollected = allInvoices.filter(i => i.paymentStatus === 'paid').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const totalPending = allInvoices.filter(i => i.paymentStatus !== 'paid').reduce((sum, i) => sum + (i.netAmount || 0), 0);
+
+    // Revenue breakdown by source (OPD, Lab, Radiology, Pharmacy, Manual)
+    const revenueBySource = await Invoice.aggregate([
+      { $match: dateFilter },
+      {
+        $group: {
+          _id: '$source',
+          revenue: { $sum: '$netAmount' },
+          collected: { $sum: { $cond: [{ $eq: ['$paymentStatus', 'paid'] }, '$netAmount', 0] } },
+          pending: { $sum: { $cond: [{ $ne: ['$paymentStatus', 'paid'] }, '$netAmount', 0] } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
+
+    // Format for chart - ensure all sources appear
+    const sourceNames = ['OPD', 'Laboratory', 'Radiology', 'Pharmacy', 'Manual'];
+    const revenueByDept = sourceNames.map(src => {
+      const found = revenueBySource.find(r => r._id === src);
+      return {
+        department: src,
+        revenue: found ? found.revenue : 0,
+        collected: found ? found.collected : 0,
+        pending: found ? found.pending : 0,
+        count: found ? found.count : 0,
+      };
+    }).filter(d => d.revenue > 0 || d.count > 0);
+
+    // Recent transactions (last 10 invoices)
+    const recentInvoices = await Invoice.find()
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const recentTransactions = recentInvoices.map(i => ({
+      id: i.invoiceNo,
+      patient: i.patientName,
+      department: i.source || 'Manual',
+      amount: i.netAmount || 0,
+      status: i.paymentStatus,
+      date: i.createdAt,
+      patientType: i.patientType || '',
+    }));
+
+    // Previous period comparison for growth
+    const periodDuration = end.getTime() - start.getTime();
+    const prevStart = new Date(start.getTime() - periodDuration);
+    const prevEnd = new Date(start);
+    const prevInvoices = await Invoice.find({ createdAt: { $gte: prevStart, $lte: prevEnd } }).lean();
+    const prevRevenue = prevInvoices.reduce((sum, i) => sum + (i.netAmount || 0), 0);
+    const growthPercent = prevRevenue > 0 ? (((periodRevenue - prevRevenue) / prevRevenue) * 100).toFixed(1) : 0;
 
     const overview = {
+      // Period-specific
+      periodRevenue,
+      periodCollected,
+      periodPending,
+      periodInvoices: invoices.length,
+      growthPercent: Number(growthPercent),
+      // All-time
       totalRevenue,
-      pendingPayments,
-      completedPayments,
-      totalInvoices: invoices.length,
+      totalCollected,
+      totalPending,
+      totalInvoices: allInvoices.length,
+      // Breakdowns
+      revenueByDept,
+      recentTransactions,
     };
     res.json({ success: true, data: overview });
   } catch (err) {
