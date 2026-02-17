@@ -7,6 +7,7 @@ import Patient from '../models/Patient.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import { isMedicineFree } from '../utils/pricing.js';
+import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 
 const router = express.Router();
 
@@ -131,6 +132,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
 
         invoiceItems.push({
           service: `${med.name}${med.dosage ? ` (${med.dosage})` : ''}`,
+          department: 'Pharmacy',
           price: invItem.price || 0,
           quantity: qtyToDispense,
         });
@@ -138,6 +140,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
         // No matching inventory item — add to invoice with price 0
         invoiceItems.push({
           service: `${med.name}${med.dosage ? ` (${med.dosage})` : ''}`,
+          department: 'Pharmacy',
           price: 0,
           quantity: qtyToDispense,
         });
@@ -157,8 +160,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           invoiceItems.forEach(item => { item.price = 0; });
         }
         const total = invoiceItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const invoiceCount = await Invoice.countDocuments();
-        const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+        const invoiceNo = await generateInvoiceNo();
 
         const invoice = new Invoice({
           invoiceNo,

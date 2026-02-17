@@ -8,6 +8,7 @@ import LabRequest from '../models/LabRequest.js';
 import RadiologyRequest from '../models/RadiologyRequest.js';
 import Invoice from '../models/Invoice.js';
 import { getLabTestPrice, getRadiologyTestPrice } from '../utils/pricing.js';
+import { generateInvoiceNo } from '../utils/invoiceHelper.js';
 
 const router = express.Router();
 
@@ -176,8 +177,7 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
         for (const labReq of labRequestDocs) {
           try {
             const testPrice = getLabTestPrice(labReq.test, patient.patientType);
-            const invoiceCount = await Invoice.countDocuments();
-            const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+            const invoiceNo = await generateInvoiceNo();
 
             const invoice = new Invoice({
               invoiceNo,
@@ -187,7 +187,7 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
               forceNo: patient.forceNo,
               patientName,
               source: 'Laboratory',
-              items: [{ service: `Lab Test - ${labReq.test}`, price: testPrice, quantity: 1 }],
+              items: [{ service: `Lab Test - ${labReq.test}`, department: 'Laboratory', price: testPrice, quantity: 1 }],
               total: testPrice,
               discount: 0,
               netAmount: testPrice,
@@ -260,8 +260,7 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
         for (const testName of radiologyTests) {
           try {
             const testPrice = getRadiologyTestPrice(testName, patient.patientType);
-            const invoiceCount = await Invoice.countDocuments();
-            const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+            const invoiceNo = await generateInvoiceNo();
 
             const invoice = new Invoice({
               invoiceNo,
@@ -271,7 +270,7 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
               forceNo: patient.forceNo,
               patientName,
               source: 'Radiology',
-              items: [{ service: `X-Ray - ${testName}`, price: testPrice, quantity: 1 }],
+              items: [{ service: `X-Ray - ${testName}`, department: 'Radiology', price: testPrice, quantity: 1 }],
               total: testPrice,
               discount: 0,
               netAmount: testPrice,
