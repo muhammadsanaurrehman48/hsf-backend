@@ -61,7 +61,7 @@ router.get('/:invoiceId', verifyToken, async (req, res) => {
 // Create invoice
 router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'admin']), async (req, res) => {
   try {
-    const { patientId, patientName, items, discount } = req.body;
+    const { patientId, patientName, items } = req.body;
 
     if (!patientId || !patientName || !items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
@@ -74,14 +74,13 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
     }
 
     const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const discountAmount = discount || 0;
-    const netAmount = total - discountAmount;
 
     const invoiceCount = await Invoice.countDocuments();
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
     // Free for ASF Staff and ASF Family; others billed
     const isFree = patient.patientType === 'ASF' || patient.patientType === 'ASF_FAMILY';
+    const netAmount = isFree ? 0 : total;
 
     const invoice = new Invoice({
       invoiceNo,
@@ -92,8 +91,8 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
       patientName,
       items,
       total,
-      discount: isFree ? total : discountAmount,
-      netAmount: isFree ? 0 : netAmount,
+      discount: 0,
+      netAmount,
       paymentStatus: isFree ? 'paid' : 'pending',
     });
 

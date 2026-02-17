@@ -14,7 +14,10 @@ const router = express.Router();
 // Accessible to: pharmacy staff, pharmacists, doctors (view only), and admins
 router.get('/prescriptions', verifyToken, checkRole(['pharmacy', 'pharmacist', 'doctor', 'admin']), async (req, res) => {
   try {
-    const prescriptions = await Prescription.find()
+    const prescriptions = await Prescription.find({
+      medicines: { $exists: true, $not: { $size: 0 } },
+      status: { $ne: 'completed' },
+    })
       .populate('patientId', 'firstName lastName mrNo forceNo')
       .populate('doctorId', 'name department')
       .sort({ createdAt: -1 });
@@ -163,7 +166,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           patientName,
           items: invoiceItems,
           total,
-          discount: medicinesFree ? total : 0,
+          discount: 0,
           netAmount: medicinesFree ? 0 : total,
           paymentStatus: medicinesFree ? 'paid' : 'pending',
         });
@@ -177,7 +180,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
             userId: staff._id,
             type: 'invoice_created',
             title: 'New Pharmacy Invoice',
-            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${total})${medicinesFree ? ' (Free - ASF/Family/School)' : ' - payment pending'}.`,
+            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${total})${medicinesFree ? ' (Free - ASF/Family)' : ' - payment pending'}.`,
             relatedId: invoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',

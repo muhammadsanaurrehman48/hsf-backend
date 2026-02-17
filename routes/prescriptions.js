@@ -103,6 +103,11 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
     const prescriptionCount = await Prescription.countDocuments();
     const rxNo = `RX-${String(prescriptionCount + 456789).padStart(6, '0')}`;
 
+    const hasMedicines = Array.isArray(medicines) && medicines.length > 0;
+    const hasLabTests = Array.isArray(labTests) && labTests.length > 0;
+    const hasRadiologyTests = Array.isArray(radiologyTests) && radiologyTests.length > 0;
+    const initialStatus = hasMedicines || hasLabTests || hasRadiologyTests ? 'pending' : 'completed';
+
     const newPrescription = new Prescription({
       rxNo,
       patientId,
@@ -111,11 +116,11 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
       forceNo,
       doctorId: req.user.id,
       diagnosis,
-      medicines,
+      medicines: medicines || [],
       labTests: labTests || [],
       radiologyTests: radiologyTests || [],
       notes,
-      status: 'pending',
+      status: initialStatus,
     });
 
     await newPrescription.save();

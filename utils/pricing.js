@@ -39,11 +39,11 @@ export const RADIOLOGY_TEST_PRICES = {
 };
 
 export const OPD_CHARGES = {
-  'ASF':        0,     // Free for ASF Staff
-  'ASF_FAMILY': 30,    // Rs. 30 for ASF Family
-  'ASF_SCHOOL': 30,    // Rs. 30 for ASF School / ASFF
-  'ASF_FOUNDATION': 30, // Rs. 30 for ASF Foundation / School
-  'CIVILIAN':   100,   // Rs. 100 for Private / Civilian
+  ASF: 0,                 // Free for ASF Staff
+  ASF_FAMILY: 0,          // ASF Family follows staff token (non-PVT)
+  ASF_SCHOOL: 30,         // ASF School / ASFF concessional token
+  ASF_FOUNDATION: 30,     // ASF Foundation concessional token
+  CIVILIAN: 100,          // Private / Civilian
 };
 
 /**
@@ -55,7 +55,8 @@ export const OPD_CHARGES = {
 export function getLabTestPrice(testName, patientType) {
   const pricing = LAB_TEST_PRICES[testName];
   if (!pricing) return 0;
-  return patientType === 'CIVILIAN' ? pricing.pvt : pricing.asf;
+  const staffTypes = ['ASF', 'ASF_FAMILY'];
+  return staffTypes.includes(patientType) ? pricing.asf : pricing.pvt;
 }
 
 /**
@@ -67,7 +68,8 @@ export function getLabTestPrice(testName, patientType) {
 export function getRadiologyTestPrice(testName, patientType) {
   const pricing = RADIOLOGY_TEST_PRICES[testName];
   if (!pricing) return 0;
-  return patientType === 'CIVILIAN' ? pricing.pvt : pricing.asf;
+  const staffTypes = ['ASF', 'ASF_FAMILY'];
+  return staffTypes.includes(patientType) ? pricing.asf : pricing.pvt;
 }
 
 /**
@@ -85,5 +87,5 @@ export function getOPDCharge(patientType) {
  * @returns {boolean}
  */
 export function isMedicineFree(patientType) {
-  return patientType === 'ASF' || patientType === 'ASF_FAMILY' || patientType === 'ASF_SCHOOL';
+  return patientType === 'ASF' || patientType === 'ASF_FAMILY';
 }
