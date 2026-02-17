@@ -65,6 +65,9 @@ const invoiceSchema = new mongoose.Schema(
     transactionId: {
       type: String,
     },
+    paidAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

@@ -150,15 +150,15 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
     try {
       const patient = prescription.patientId;
       const patientName = patient ? `${patient.firstName} ${patient.lastName}` : (prescription.mrNo || 'Unknown Patient');
-      const medicinesFree = patient ? isMedicineFree(patient.patientType) : false;
 
       if (invoiceItems.length > 0) {
+        // Medicines are free for ASF Staff & Family
+        if (isMedicineFree(patient?.patientType)) {
+          invoiceItems.forEach(item => { item.price = 0; });
+        }
         const total = invoiceItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
         const invoiceCount = await Invoice.countDocuments();
         const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
-
-        const discount = medicinesFree ? total : 0;
-        const netAmount = Math.max(total - discount, 0);
 
         const invoice = new Invoice({
           invoiceNo,
@@ -170,10 +170,10 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           source: 'Pharmacy',
           items: invoiceItems,
           total,
-          discount,
-          netAmount,
+          discount: 0,
+          netAmount: total,
           amountPaid: 0,
-          paymentStatus: medicinesFree ? 'paid' : 'pending',
+          paymentStatus: 'pending',
         });
         await invoice.save();
         console.log('✅ [PHARMACY] Invoice created:', invoiceNo, 'for patient:', patientName, 'Total: Rs.', total);
@@ -184,8 +184,8 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
           await Notification.create({
             userId: staff._id,
             type: 'invoice_created',
-            title: medicinesFree ? 'Pharmacy Dispensed (Free)' : 'New Pharmacy Invoice',
-            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${netAmount})${medicinesFree ? ' - Free (ASF Staff/Family). No payment required.' : ' - payment pending'}.`,
+            title: 'New Pharmacy Invoice',
+            message: `Prescription ${prescription.rxNo} dispensed for ${patientName}. Invoice ${invoiceNo} created (Rs. ${total}) - payment pending.`,
             relatedId: invoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',

@@ -248,7 +248,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
     try {
       const opdCharge = getOPDCharge(patient?.patientType);
       const patientName = `${patient?.firstName} ${patient?.lastName}`;
-      const isFree = opdCharge === 0;
 
       const invoiceCount = await Invoice.countDocuments();
       const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
@@ -265,25 +264,26 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
         total: opdCharge,
         discount: 0,
         netAmount: opdCharge,
-        paymentStatus: isFree ? 'paid' : 'pending',
+        amountPaid: 0,
+        paymentStatus: 'pending',
       });
       await opdInvoice.save();
       console.log('✅ [BACKEND] OPD Invoice created:', invoiceNo, '| Rs.', opdCharge, '| Type:', patient.patientType);
 
-      // Notify receptionist about OPD invoice (only if there's a charge)
-      if (!isFree) {
-        const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
-        for (const staff of receptionists) {
-          await Notification.create({
-            userId: staff._id,
-            type: 'invoice_created',
-            title: 'OPD Fee Invoice',
-            message: `OPD token generated for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${opdCharge} - payment pending.`,
-            relatedId: opdInvoice._id,
-            relatedType: 'invoice',
-            actionUrl: '/receptionist/billing',
-          });
-        }
+      // Notify receptionist about ALL OPD invoices (even free ones need processing)
+      const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
+      for (const staff of receptionists) {
+        await Notification.create({
+          userId: staff._id,
+          type: 'invoice_created',
+          title: 'OPD Fee Invoice',
+          message: opdCharge > 0
+            ? `OPD token generated for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${opdCharge} - payment pending.`
+            : `OPD token generated for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Free OPD - needs processing.`,
+          relatedId: opdInvoice._id,
+          relatedType: 'invoice',
+          actionUrl: '/receptionist/billing',
+        });
       }
     } catch (invoiceErr) {
       console.error('⚠️ [BACKEND] Error creating OPD invoice:', invoiceErr);

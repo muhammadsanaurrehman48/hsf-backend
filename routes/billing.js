@@ -6,7 +6,6 @@ import Inventory from '../models/Inventory.js';
 import {
   LAB_TEST_PRICES,
   RADIOLOGY_TEST_PRICES,
-  OPD_CHARGES,
   getLabTestPrice,
   getRadiologyTestPrice,
   getOPDCharge,
@@ -19,9 +18,6 @@ const router = express.Router();
 router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 'receptionist']), async (req, res) => {
   try {
     const { patientType } = req.params;
-    const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
-    const isFree = FREE_TYPES.includes(patientType);
-    const medsFree = isMedicineFree(patientType);
 
     // OPD services
     const opdServices = [
@@ -29,7 +25,6 @@ router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 
         name: 'OPD Consultation',
         department: 'OPD',
         price: getOPDCharge(patientType),
-        isFree: getOPDCharge(patientType) === 0,
       },
     ];
 
@@ -38,7 +33,6 @@ router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 
       name: testName,
       department: 'Laboratory',
       price: getLabTestPrice(testName, patientType),
-      isFree,
     }));
 
     // Radiology services
@@ -46,7 +40,6 @@ router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 
       name: testName,
       department: 'Radiology',
       price: getRadiologyTestPrice(testName, patientType),
-      isFree,
     }));
 
     // Pharmacy items from inventory
@@ -57,13 +50,12 @@ router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 
         quantity: { $gt: 0 },
       }).select('name price quantity').sort({ name: 1 });
 
+      const medicineFree = isMedicineFree(patientType);
       pharmacyItems = meds.map(m => ({
         name: m.name,
         department: 'Pharmacy',
-        price: medsFree ? 0 : (m.price || 0),
-        originalPrice: m.price || 0,
+        price: medicineFree ? 0 : (m.price || 0),
         stock: m.quantity,
-        isFree: medsFree,
       }));
     } catch (invErr) {
       console.warn('⚠️ Could not fetch inventory for pricing:', invErr.message);
@@ -73,9 +65,8 @@ router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 
       success: true,
       data: {
         patientType,
-        isFreePatient: isFree,
-        medicinesFree: medsFree,
         opdCharge: getOPDCharge(patientType),
+        medicineFree: isMedicineFree(patientType),
         services: {
           opd: opdServices,
           laboratory: labServices,
@@ -86,6 +77,121 @@ router.get('/pricing/:patientType', verifyToken, checkRole(['billing', 'admin', 
     });
   } catch (err) {
     console.error('Error fetching pricing:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ─── Revenue summary for reports ───
+router.get('/revenue/summary', verifyToken, checkRole(['billing', 'admin', 'receptionist']), async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    const paidMatch = { paymentStatus: 'paid' };
+    if (from || to) {
+      paidMatch.updatedAt = {};
+      if (from) paidMatch.updatedAt.$gte = new Date(from);
+      if (to) {
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59, 999);
+        paidMatch.updatedAt.$lte = toDate;
+      }
+    }
+
+    const [overall] = await Invoice.aggregate([
+      { $match: paidMatch },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$netAmount' },
+          totalCollected: { $sum: '$amountPaid' },
+          totalDiscount: { $sum: '$discount' },
+          invoiceCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const bySource = await Invoice.aggregate([
+      { $match: paidMatch },
+      {
+        $group: {
+          _id: '$source',
+          revenue: { $sum: '$netAmount' },
+          collected: { $sum: '$amountPaid' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
+
+    const byPatientType = await Invoice.aggregate([
+      { $match: paidMatch },
+      {
+        $group: {
+          _id: '$patientType',
+          revenue: { $sum: '$netAmount' },
+          collected: { $sum: '$amountPaid' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const dailyMatch = { paymentStatus: 'paid' };
+    if (from || to) {
+      dailyMatch.updatedAt = {};
+      if (from) dailyMatch.updatedAt.$gte = new Date(from);
+      if (to) {
+        const dEnd = new Date(to);
+        dEnd.setHours(23, 59, 59, 999);
+        dailyMatch.updatedAt.$lte = dEnd;
+      }
+    } else {
+      dailyMatch.updatedAt = { $gte: thirtyDaysAgo };
+    }
+
+    const daily = await Invoice.aggregate([
+      { $match: dailyMatch },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: { $ifNull: ['$paidAt', '$updatedAt'] },
+            },
+          },
+          revenue: { $sum: '$netAmount' },
+          collected: { $sum: '$amountPaid' },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: -1 } },
+    ]);
+
+    const [pending] = await Invoice.aggregate([
+      { $match: { paymentStatus: { $in: ['pending', 'partial'] } } },
+      {
+        $group: {
+          _id: null,
+          totalPending: { $sum: { $subtract: ['$netAmount', { $ifNull: ['$amountPaid', 0] }] } },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        overall: overall || { totalRevenue: 0, totalCollected: 0, totalDiscount: 0, invoiceCount: 0 },
+        bySource,
+        byPatientType,
+        daily,
+        pending: pending || { totalPending: 0, count: 0 },
+      },
+    });
+  } catch (err) {
+    console.error('Error generating revenue summary:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -155,71 +261,27 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // Fetch patient to get patient type for auto-payment logic
     const patient = await Patient.findById(patientId);
     if (!patient) {
       return res.status(404).json({ success: false, message: 'Patient not found' });
     }
 
-    // ─── Re-price items server-side using pricing utils (source of truth) ───
-    const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
-    const isFree = FREE_TYPES.includes(patient.patientType);
-
-    const pricedItems = items.map(item => {
-      let price = Number(item.price) || 0;
-      const dept = (item.department || '').toLowerCase();
-
-      // Auto-price known services based on patient type
-      if (dept === 'laboratory' || dept === 'lab') {
-        const labPrice = getLabTestPrice(item.service || item.name, patient.patientType);
-        if (labPrice > 0) price = labPrice;
-      } else if (dept === 'radiology') {
-        const radPrice = getRadiologyTestPrice(item.service || item.name, patient.patientType);
-        if (radPrice > 0) price = radPrice;
-      } else if (dept === 'opd') {
-        // Use OPD charge if item looks like a consultation
-        const isConsultation = /consult|opd|token/i.test(item.service || item.name || '');
-        if (isConsultation) price = getOPDCharge(patient.patientType);
-      } else if (dept === 'pharmacy') {
-        // Medicines free for ASF types
-        if (isMedicineFree(patient.patientType)) price = 0;
-      }
-
-      return {
-        service: item.service || item.name,
-        price,
-        quantity: Number(item.quantity) || 1,
-        department: item.department || 'General',
-      };
-    });
+    // Build items with prices as sent by frontend
+    const pricedItems = items.map(item => ({
+      service: item.service || item.name,
+      price: Number(item.price) || 0,
+      quantity: Number(item.quantity) || 1,
+      department: item.department || 'General',
+    }));
 
     const total = pricedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
     const invoiceCount = await Invoice.countDocuments();
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
-    // Accept explicit discount from frontend, or auto-discount for free patients
-    const discount = isFree ? total : (req.body.discount != null ? Number(req.body.discount) : 0);
+    // Accept explicit discount from frontend (default 0)
+    const discount = req.body.discount != null ? Number(req.body.discount) : 0;
     const netAmount = Math.max(total - discount, 0);
-
-    // Check if payment info was provided during creation (immediate payment)
-    const immediatePayment = req.body.paymentMethod && req.body.amountPaid != null;
-    let amountPaid = 0;
-    let paymentStatus = 'pending';
-    let paymentMethod = undefined;
-    let transactionId = undefined;
-
-    if (isFree || netAmount === 0) {
-      // Free patients — auto-mark as paid
-      amountPaid = netAmount;
-      paymentStatus = 'paid';
-    } else if (immediatePayment) {
-      // Receptionist collected payment during creation
-      amountPaid = Math.min(Number(req.body.amountPaid), netAmount);
-      paymentMethod = req.body.paymentMethod;
-      transactionId = req.body.transactionId || undefined;
-      paymentStatus = amountPaid >= netAmount ? 'paid' : (amountPaid > 0 ? 'partial' : 'pending');
-    }
 
     const invoice = new Invoice({
       invoiceNo,
@@ -233,23 +295,15 @@ router.post('/', verifyToken, checkRole(['billing', 'doctor', 'receptionist', 'a
       total,
       discount,
       netAmount,
-      amountPaid,
-      paymentStatus,
-      paymentMethod,
-      transactionId,
+      amountPaid: 0,
+      paymentStatus: 'pending',
     });
 
     await invoice.save();
 
-    const statusMsg = isFree
-      ? 'Invoice created (Free - ASF)'
-      : paymentStatus === 'paid'
-        ? 'Invoice created & paid'
-        : 'Invoice created';
-
     res.status(201).json({ 
       success: true, 
-      message: statusMsg,
+      message: 'Invoice created',
       data: {
         id: invoice._id,
         ...invoice.toObject(),
@@ -270,7 +324,10 @@ router.put('/:invoiceId', verifyToken, checkRole(['billing', 'admin', 'reception
     }
 
     const { paymentStatus, paymentMethod, transactionId, amountPaid, discount } = req.body;
-    if (paymentStatus) invoice.paymentStatus = paymentStatus;
+    if (paymentStatus) {
+      invoice.paymentStatus = paymentStatus;
+      if (paymentStatus === 'paid') invoice.paidAt = new Date();
+    }
     if (paymentMethod) invoice.paymentMethod = paymentMethod;
     if (transactionId) invoice.transactionId = transactionId;
     if (amountPaid != null) {
@@ -279,6 +336,7 @@ router.put('/:invoiceId', verifyToken, checkRole(['billing', 'admin', 'reception
       const remaining = invoice.netAmount - invoice.amountPaid;
       if (remaining <= 0 && !paymentStatus) {
         invoice.paymentStatus = 'paid';
+        invoice.paidAt = new Date();
       }
     }
     if (discount != null) {

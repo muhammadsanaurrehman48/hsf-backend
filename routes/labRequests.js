@@ -113,11 +113,6 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
         const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
         const total = testPrice;
-        // Free for all ASF-affiliated types
-        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
-        const isFree = FREE_TYPES.includes(patient.patientType);
-        const discount = isFree ? total : 0;
-        const netAmount = Math.max(total - discount, 0);
 
         const invoice = new Invoice({
           invoiceNo,
@@ -129,10 +124,10 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
           source: 'Laboratory',
           items: [{ service: `Lab Test - ${test}`, price: testPrice, quantity: 1 }],
           total,
-          discount,
-          netAmount,
-          amountPaid: isFree ? 0 : 0,
-          paymentStatus: netAmount === 0 ? 'paid' : 'pending',
+          discount: 0,
+          netAmount: total,
+          amountPaid: 0,
+          paymentStatus: 'pending',
         });
         await invoice.save();
         console.log('✅ [LAB] Invoice created:', invoiceNo, 'for', test, '| Rs.', testPrice, '| Patient:', patientName);
@@ -144,7 +139,7 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
             userId: staff._id,
             type: 'invoice_created',
             title: 'New Lab Test Invoice',
-            message: `Lab test "${test}" requested for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${netAmount} - payment pending.`,
+            message: `Lab test "${test}" requested for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${total} - payment pending.`,
             relatedId: invoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',

@@ -114,11 +114,6 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
         const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
 
         const total = testPrice;
-        // Free for all ASF-affiliated types
-        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
-        const isFree = FREE_TYPES.includes(patient.patientType);
-        const discount = isFree ? total : 0;
-        const netAmount = Math.max(total - discount, 0);
 
         const invoice = new Invoice({
           invoiceNo,
@@ -130,10 +125,10 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
           source: 'Radiology',
           items: [{ service: `X-Ray - ${testType}`, price: testPrice, quantity: 1 }],
           total,
-          discount,
-          netAmount,
+          discount: 0,
+          netAmount: total,
           amountPaid: 0,
-          paymentStatus: netAmount === 0 ? 'paid' : 'pending',
+          paymentStatus: 'pending',
         });
         await invoice.save();
         console.log('✅ [RADIOLOGY] Invoice created:', invoiceNo, 'for', testType, '| Rs.', testPrice, '| Patient:', patientName);
@@ -145,7 +140,7 @@ router.post('/', verifyToken, checkRole(['doctor']), async (req, res) => {
             userId: staff._id,
             type: 'invoice_created',
             title: 'New Radiology Invoice',
-            message: `X-Ray "${testType}" requested for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${netAmount} - payment pending.`,
+            message: `X-Ray "${testType}" requested for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${total} - payment pending.`,
             relatedId: invoice._id,
             relatedType: 'invoice',
             actionUrl: '/receptionist/billing',

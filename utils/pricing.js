@@ -1,6 +1,8 @@
 // Centralized pricing configuration for ASF Medical Complex
-// Rates = ASF Staff / ASF Family / ASF School
-// PVT = Civilian (Private Patient)
+// Rates (asf) = ASF Staff & ASF Family ONLY
+// PVT = Civilian / ASF School / ASF Foundation
+// OPD token exception: ASF School & Foundation pay Rs.30
+// Medicines: FREE for ASF Staff & Family only
 
 export const LAB_TEST_PRICES = {
   'CPC & ESR':         { asf: 250, pvt: 450 },
@@ -52,8 +54,9 @@ export const OPD_CHARGES = {
  * @param {string} patientType - ASF, ASF_FAMILY, ASF_SCHOOL, or CIVILIAN
  * @returns {number} price
  */
-// All ASF-affiliated types
-const ASF_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
+// Only ASF Staff & Family get concessional (asf) rates for Lab & Radiology
+// ASF_SCHOOL & ASF_FOUNDATION pay PVT rates (except OPD token)
+const ASF_TYPES = ['ASF', 'ASF_FAMILY'];
 
 export function getLabTestPrice(testName, patientType) {
   const pricing = LAB_TEST_PRICES[testName];

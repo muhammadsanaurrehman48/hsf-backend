@@ -172,17 +172,12 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
       // Create invoices for lab tests and notify receptionist
       if (patient) {
         const patientName = `${patient.firstName} ${patient.lastName}`;
-        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
-        const isFree = FREE_TYPES.includes(patient.patientType);
 
         for (const labReq of labRequestDocs) {
           try {
             const testPrice = getLabTestPrice(labReq.test, patient.patientType);
             const invoiceCount = await Invoice.countDocuments();
             const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
-            const total = testPrice;
-            const discount = isFree ? total : 0;
-            const netAmount = Math.max(total - discount, 0);
 
             const invoice = new Invoice({
               invoiceNo,
@@ -193,11 +188,11 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
               patientName,
               source: 'Laboratory',
               items: [{ service: `Lab Test - ${labReq.test}`, price: testPrice, quantity: 1 }],
-              total,
-              discount,
-              netAmount,
+              total: testPrice,
+              discount: 0,
+              netAmount: testPrice,
               amountPaid: 0,
-              paymentStatus: netAmount === 0 ? 'paid' : 'pending',
+              paymentStatus: 'pending',
             });
             await invoice.save();
             console.log('✅ [PRESCRIPTION] Lab invoice created:', invoiceNo, 'for', labReq.test, '| Rs.', testPrice);
@@ -209,7 +204,7 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
                 userId: staff._id,
                 type: 'invoice_created',
                 title: 'New Lab Test Invoice',
-                message: `Lab test "${labReq.test}" requested by Dr. ${doctor?.name} for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${netAmount}${isFree ? ' (Free - ASF)' : ' - payment pending'}.`,
+                message: `Lab test "${labReq.test}" requested by Dr. ${doctor?.name} for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${testPrice} - payment pending.`,
                 relatedId: invoice._id,
                 relatedType: 'invoice',
                 actionUrl: '/receptionist/billing',
@@ -261,17 +256,12 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
       // Create invoices for radiology tests and notify receptionist
       if (patient) {
         const patientName = `${patient.firstName} ${patient.lastName}`;
-        const FREE_TYPES = ['ASF', 'ASF_FAMILY', 'ASF_FOUNDATION', 'ASF_SCHOOL'];
-        const isFree = FREE_TYPES.includes(patient.patientType);
 
         for (const testName of radiologyTests) {
           try {
             const testPrice = getRadiologyTestPrice(testName, patient.patientType);
             const invoiceCount = await Invoice.countDocuments();
             const invoiceNo = `INV-${new Date().getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
-            const total = testPrice;
-            const discount = isFree ? total : 0;
-            const netAmount = Math.max(total - discount, 0);
 
             const invoice = new Invoice({
               invoiceNo,
@@ -282,11 +272,11 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
               patientName,
               source: 'Radiology',
               items: [{ service: `X-Ray - ${testName}`, price: testPrice, quantity: 1 }],
-              total,
-              discount,
-              netAmount,
+              total: testPrice,
+              discount: 0,
+              netAmount: testPrice,
               amountPaid: 0,
-              paymentStatus: netAmount === 0 ? 'paid' : 'pending',
+              paymentStatus: 'pending',
             });
             await invoice.save();
             console.log('✅ [PRESCRIPTION] Radiology invoice created:', invoiceNo, 'for', testName, '| Rs.', testPrice);
@@ -298,7 +288,7 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
                 userId: staff._id,
                 type: 'invoice_created',
                 title: 'New Radiology Invoice',
-                message: `X-Ray "${testName}" requested by Dr. ${doctor?.name} for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${netAmount}${isFree ? ' (Free - ASF)' : ' - payment pending'}.`,
+                message: `X-Ray "${testName}" requested by Dr. ${doctor?.name} for ${patientName} (${patient.patientType}). Invoice ${invoiceNo} - Rs. ${testPrice} - payment pending.`,
                 relatedId: invoice._id,
                 relatedType: 'invoice',
                 actionUrl: '/receptionist/billing',
