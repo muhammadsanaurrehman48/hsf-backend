@@ -185,9 +185,24 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
       });
 
       if (usableFamily.length > 0) {
+        const seenKeys = new Set();
+        const uniqueFamily = usableFamily.filter((fm) => {
+          const fullName = (fm.name || `${fm.firstName || ''} ${fm.lastName || ''}`).trim();
+          const cnicKey = (fm.cnic || '').replace(/\D/g, '');
+          const dobKey = fm.dateOfBirth || '';
+          const relationKey = fm.relationToHead || '';
+          const dedupKey = cnicKey || `${fullName.toLowerCase()}|${dobKey}|${relationKey}`;
+          if (seenKeys.has(dedupKey)) {
+            console.log('⚠️ [PATIENT] Skipping duplicate family member entry:', dedupKey);
+            return false;
+          }
+          seenKeys.add(dedupKey);
+          return true;
+        });
+
         let counter = baseNumber;
         const toInsert = [];
-        for (const fm of usableFamily) {
+        for (const fm of uniqueFamily) {
           const fullName = (fm.name || `${fm.firstName || ''} ${fm.lastName || ''}`).trim();
           if (!fullName) {
             return res.status(400).json({ success: false, message: 'Family member name is required' });
