@@ -296,6 +296,7 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       patientName: `${patient?.firstName} ${patient?.lastName}`,
       mrNo: patient?.patientNo,
       patientType: patient?.patientType,
+      forceNo: patient?.forceNo,
       doctorId: doctor?._id,
       doctor: doctor?.name,
       department: doctor?.department,
@@ -307,6 +308,13 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       status: newAppointment.status,
       reason: newAppointment.reason,
       createdAt: newAppointment.createdAt,
+      // Include invoice details so frontend can display them
+      invoice: opdInvoice ? {
+        invoiceNo: opdInvoice.invoiceNo,
+        amount: opdInvoice.netAmount,
+        paymentStatus: opdInvoice.paymentStatus,
+        source: opdInvoice.source,
+      } : null,
     };
 
     console.log('📤 [BACKEND] Sending formatted response:', formattedAppointment);

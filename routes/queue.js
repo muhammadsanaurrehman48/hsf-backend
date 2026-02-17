@@ -74,7 +74,7 @@ router.get('/room/:roomNo', async (req, res) => {
   }
 });
 
-// Get all active queues
+// Get all active queues (with full patient details for OPD Entries page)
 router.get('/', async (req, res) => {
   try {
     const queues = await Queue.find({ status: 'active' })
@@ -90,6 +90,18 @@ router.get('/', async (req, res) => {
       currentToken: q.currentToken,
       totalPatients: q.patients.length,
       waitingPatients: q.patients.filter(p => p.status === 'waiting').length,
+      patients: q.patients.map((p, index) => ({
+        _id: p._id,
+        appointmentId: p.appointmentId,
+        tokenNo: p.tokenNo,
+        patientNo: p.patientNo,
+        patientName: p.patientName,
+        forceNo: p.forceNo,
+        patientId: p.patientId,
+        status: p.status,
+        position: index + 1,
+        createdAt: p.createdAt,
+      })),
     }));
 
     res.json({ success: true, data });
