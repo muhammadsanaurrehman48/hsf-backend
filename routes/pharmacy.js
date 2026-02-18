@@ -82,6 +82,11 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
       return res.status(404).json({ success: false, message: 'Prescription not found' });
     }
 
+    // Prevent double-dispensing
+    if (prescription.status === 'dispensed' || prescription.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Prescription has already been dispensed' });
+    }
+
     prescription.status = 'dispensed';
     prescription.dispensedAt = new Date();
     prescription.dispensedBy = req.user.id;
@@ -198,6 +203,11 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
     } catch (invoiceErr) {
       console.error('⚠️ [PHARMACY] Error creating invoice (prescription still dispensed):', invoiceErr);
     }
+
+    // Mark prescription as completed now that medicines have been dispensed
+    prescription.status = 'completed';
+    await prescription.save();
+    console.log('✅ [PHARMACY] Prescription', prescription.rxNo, 'marked as completed');
 
     res.json({ 
       success: true, 

@@ -103,6 +103,22 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
       return res.status(400).json({ success: false, message: 'Patient ID and diagnosis are required' });
     }
 
+    // Prevent duplicate prescriptions for the same appointment
+    if (appointmentId) {
+      const existingRx = await Prescription.findOne({ appointmentId });
+      if (existingRx) {
+        console.log('⚠️ [BACKEND] Prescription already exists for appointment:', appointmentId, '→ returning existing:', existingRx.rxNo);
+        return res.status(201).json({
+          success: true,
+          message: 'Prescription already exists for this appointment',
+          data: {
+            id: existingRx._id,
+            ...existingRx.toObject(),
+          }
+        });
+      }
+    }
+
     const prescriptionCount = await Prescription.countDocuments();
     const rxNo = `RX-${String(prescriptionCount + 456789).padStart(6, '0')}`;
 

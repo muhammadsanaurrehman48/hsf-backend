@@ -24,18 +24,8 @@ router.get('/room/:roomNo', async (req, res) => {
     console.log('📋 [QUEUE] Total patients in queue:', queue.patients.length);
     console.log('⏳ [QUEUE] Waiting patients:', queue.patients.filter(p => p.status === 'waiting').length);
 
-    // Find current serving patient - ensure it has serving status
-    let currentPatient = queue.patients[queue.currentPatientIndex];
-    if (currentPatient && currentPatient.status !== 'serving' && currentPatient.status !== 'completed') {
-      console.log('⚠️ [QUEUE] Updating current patient status to serving:', currentPatient.patientName);
-      currentPatient.status = 'serving';
-      await queue.save();
-    }
-
-    // Re-fetch after potential save to get fresh data
-    if (currentPatient && currentPatient.status === 'serving') {
-      currentPatient = queue.patients[queue.currentPatientIndex];
-    }
+    // Find current serving patient (read-only — no mutations in GET)
+    const currentPatient = queue.patients[queue.currentPatientIndex] || null;
 
     // Filter to only today's patients
     const todayStart = new Date();
