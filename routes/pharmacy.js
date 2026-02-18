@@ -17,7 +17,7 @@ router.get('/prescriptions', verifyToken, checkRole(['pharmacy', 'pharmacist', '
   try {
     const prescriptions = await Prescription.find({
       medicines: { $exists: true, $not: { $size: 0 } },
-      status: { $ne: 'completed' },
+      status: { $in: ['pending', 'dispensed'] },
     })
       .populate('patientId', 'firstName lastName mrNo forceNo')
       .populate('doctorId', 'name department')
@@ -204,10 +204,7 @@ router.put('/dispense/:prescriptionId', verifyToken, checkRole(['pharmacy', 'pha
       console.error('⚠️ [PHARMACY] Error creating invoice (prescription still dispensed):', invoiceErr);
     }
 
-    // Mark prescription as completed now that medicines have been dispensed
-    prescription.status = 'completed';
-    await prescription.save();
-    console.log('✅ [PHARMACY] Prescription', prescription.rxNo, 'marked as completed');
+    // (No longer marking prescription as completed; status remains 'dispensed')
 
     res.json({ 
       success: true, 
