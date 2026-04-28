@@ -161,7 +161,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
   try {
     const { patientId, doctorId, roomNo, date, time, reason } = req.body;
     
-    console.log('📝 [BACKEND] Creating appointment with:', { patientId, doctorId, roomNo, date, time: time || 'auto', reason });
 
     // Validate required fields with detailed error logging
     const missingFields = [];
@@ -201,13 +200,11 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
     });
 
     await newAppointment.save();
-    console.log('✅ [BACKEND] Appointment saved to database:', appointmentNo);
 
     // Add patient to queue for this room and generate OPD token with daily reset
     const patient = await Patient.findById(patientId);
     const doctor = await User.findById(doctorId);
     
-    console.log('📋 [BACKEND] Patient:', patient?.firstName, patient?.lastName, '| Doctor:', doctor?.name);
     
     let queue = await Queue.findOne({ roomNo });
     if (!queue) {
@@ -226,7 +223,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
     const dailyTokenCounter = getDailyTokenNumber(queue.patients);
     const tokenNo = generateOPDToken(roomNo, dailyTokenCounter);
     
-    console.log('🎫 [BACKEND] Daily token counter:', dailyTokenCounter, '| Token:', tokenNo);
     
     queue.patients.push({
       appointmentId: newAppointment._id,
@@ -240,7 +236,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
     });
 
     await queue.save();
-    console.log('✅ [BACKEND] Patient added to queue for room:', roomNo, '| Token:', tokenNo);
 
     // Decrease doctor's available slots
     if (doctor) {
@@ -248,7 +243,9 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       const newSlots = Math.max(0, currentSlots - 1);
       doctor.available_slots = newSlots;
       await doctor.save();
-      console.log('🎫 [BACKEND] Doctor slots updated:', { 
+      await Notification.create({
+        userId: doctor._id,
+        type: 'slots_updated',
         doctorName: doctor.name, 
         previousSlots: currentSlots, 
         currentSlots: newSlots 
@@ -257,7 +254,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
 
     // Create notification for all nurses
     const nurses = await User.find({ role: 'nurse' });
-    console.log('🔔 [BACKEND] Notifying', nurses.length, 'nurses about new appointment');
     
     for (const nurse of nurses) {
       await Notification.create({
@@ -270,7 +266,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
         actionUrl: `/nurse/vitals/${newAppointment._id}`,
       });
     }
-    console.log('✅ [BACKEND] Notifications created for nurses');
 
     // Generate OPD fee invoice based on patient type
     let opdInvoice = null;
@@ -296,7 +291,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
         paymentStatus: 'pending',
       });
       await opdInvoice.save();
-      console.log('✅ [BACKEND] OPD Invoice created:', invoiceNo, '| Rs.', opdCharge, '| Type:', patient.patientType);
 
       // Notify receptionist about ALL OPD invoices (even free ones need processing)
       const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
@@ -345,7 +339,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'doctor', 'admin']), as
       } : null,
     };
 
-    console.log('📤 [BACKEND] Sending formatted response:', formattedAppointment);
 
     res.status(201).json({ 
       success: true, 
@@ -375,7 +368,6 @@ router.put('/:appointmentId', verifyToken, async (req, res) => {
     if (date) appointment.date = date;
 
     await appointment.save();
-    console.log('📝 [BACKEND] Appointment status updated:', appointment.appointmentNo, '| From:', previousStatus, 'To:', status);
 
     // Handle slot restoration when appointment is completed or cancelled
     if (status && (status === 'completed' || status === 'cancelled' || status === 'no-show')) {
@@ -387,7 +379,9 @@ router.put('/:appointmentId', verifyToken, async (req, res) => {
           const restoredSlots = Math.min(maxSlots, previousSlots + 1);
           doctor.available_slots = restoredSlots;
           await doctor.save();
-          console.log('🎫 [BACKEND] Slot restored:', {
+          await Notification.create({
+            userId: doctor._id,
+            type: 'appointment_cancelled',
             doctorName: doctor.name,
             previousSlots: previousSlots,
             currentSlots: restoredSlots,
@@ -403,7 +397,6 @@ router.put('/:appointmentId', verifyToken, async (req, res) => {
       if (queue) {
         const patientInQueue = queue.patients.find(p => p.appointmentId?.toString() === appointment._id.toString());
         if (patientInQueue) {
-          console.log('📋 [BACKEND] Syncing queue for appointment. Old status:', patientInQueue.status, '| New status:', status);
           // Map appointment status to queue status
           if (status === 'completed') {
             patientInQueue.status = 'completed';
@@ -413,7 +406,6 @@ router.put('/:appointmentId', verifyToken, async (req, res) => {
             patientInQueue.status = 'vitals_recorded';
           }
           await queue.save();
-          console.log('✅ [BACKEND] Queue synced for appointment:', appointment.appointmentNo);
         }
       }
     }
@@ -436,7 +428,6 @@ router.put('/:appointmentId', verifyToken, async (req, res) => {
 router.delete('/:appointmentId', verifyToken, checkRole(['receptionist', 'admin']), async (req, res) => {
   try {
     const appointmentId = req.params.appointmentId;
-    console.log('🔍 [BACKEND] Deleting appointment:', appointmentId);
     
     const appointment = await Appointment.findById(appointmentId);
     if (!appointment) {
@@ -446,27 +437,21 @@ router.delete('/:appointmentId', verifyToken, checkRole(['receptionist', 'admin'
 
     const roomNo = appointment.roomNo;
     const appointmentIdStr = appointment._id.toString();
-    console.log('📍 [BACKEND] Appointment details - Room:', roomNo, '| AppointmentId:', appointmentIdStr);
 
     // Find and update queue BEFORE deleting the appointment
     const queue = await Queue.findOne({ roomNo });
-    console.log('🔎 [BACKEND] Queue lookup for room:', roomNo, '| Found:', !!queue);
     
     if (queue) {
-      console.log('📊 [BACKEND] Queue has', queue.patients.length, 'patients');
       
       // Find the patient by appointmentId
       const patientIndex = queue.patients.findIndex(p => {
         const pAppId = p.appointmentId?.toString();
-        console.log('  ↳ Checking patient:', p.patientName, '| AppointmentId:', pAppId, '| Match:', pAppId === appointmentIdStr);
         return pAppId === appointmentIdStr;
       });
 
-      console.log('🔎 [BACKEND] Patient index found:', patientIndex);
 
       if (patientIndex !== -1) {
         const removedPatient = queue.patients.splice(patientIndex, 1)[0];
-        console.log('🗑️ [BACKEND] Removed', removedPatient.patientName, 'from queue for room:', roomNo);
         
         // If we removed the current patient (index 0), advance to next one
         if (patientIndex === 0 && queue.patients.length > 0) {
@@ -475,16 +460,13 @@ router.delete('/:appointmentId', verifyToken, checkRole(['receptionist', 'admin'
             nextPatient.status = 'serving';
             queue.currentToken = nextPatient.tokenNo;
             queue.currentPatientIndex = 0;
-            console.log('⏭️ [BACKEND] Auto-advanced to next patient:', nextPatient.patientName, '| Token:', nextPatient.tokenNo);
           }
         } else if (queue.patients.length === 0) {
           queue.currentToken = null;
           queue.currentPatientIndex = 0;
-          console.log('🛑 [BACKEND] Queue is now empty');
         }
         
         await queue.save();
-        console.log('✅ [BACKEND] Queue updated after appointment deletion | Patients remaining:', queue.patients.length);
       } else {
         console.warn('⚠️ [BACKEND] Patient with appointmentId', appointmentIdStr, 'not found in queue');
       }
@@ -500,7 +482,9 @@ router.delete('/:appointmentId', verifyToken, checkRole(['receptionist', 'admin'
       const restoredSlots = Math.min(maxSlots, previousSlots + 1);
       doctor.available_slots = restoredSlots;
       await doctor.save();
-      console.log('🎫 [BACKEND] Slot restored on deletion:', {
+      await Notification.create({
+        userId: doctor._id,
+        type: 'appointment_deleted',
         doctorName: doctor.name,
         previousSlots: previousSlots,
         currentSlots: restoredSlots,
@@ -510,7 +494,6 @@ router.delete('/:appointmentId', verifyToken, checkRole(['receptionist', 'admin'
 
     // Now delete the appointment
     await Appointment.findByIdAndDelete(appointmentId);
-    console.log('✅ [BACKEND] Appointment deleted from database');
 
     res.json({ success: true, message: 'Appointment deleted', removedFromQueue: true });
   } catch (err) {
@@ -530,7 +513,6 @@ router.post('/:appointmentId/assign-token', verifyToken, checkRole(['receptionis
       return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
 
-    console.log('🎫 [BACKEND] Assigning token to appointment:', appointment.appointmentNo);
 
     // Get or create queue for this room
     let queue = await Queue.findOne({ roomNo: appointment.roomNo });
@@ -544,7 +526,6 @@ router.post('/:appointmentId/assign-token', verifyToken, checkRole(['receptionis
         status: 'active',
         patients: [],
       });
-      console.log('📋 [BACKEND] Created new queue for room:', appointment.roomNo);
     }
 
     // Check if patient already in queue
@@ -577,11 +558,9 @@ router.post('/:appointmentId/assign-token', verifyToken, checkRole(['receptionis
       queue.patients[0].status = 'serving';
       queue.currentToken = tokenNo;
       queue.currentPatientIndex = 0;
-      console.log('👤 [BACKEND] First patient automatically set as serving');
     }
 
     await queue.save();
-    console.log('✅ [BACKEND] Token assigned:', tokenNo, 'To patient:', appointment.patientId.firstName);
 
     res.json({ 
       success: true, 
@@ -603,7 +582,6 @@ router.post('/:appointmentId/assign-token', verifyToken, checkRole(['receptionis
 // Appointments stay in database for historical records; only queues are cleared
 router.post('/admin/daily-reset', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    console.log('🔄 [BACKEND] Running daily appointment reset...');
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -623,7 +601,6 @@ router.post('/admin/daily-reset', verifyToken, checkRole(['admin']), async (req,
       },
       { $set: { status: 'completed' } }
     );
-    console.log('📋 [BACKEND] Archived', archiveResult.modifiedCount, 'appointments (marked as completed)');
 
     // Clear queue patients but keep queue structure
     const queues = await Queue.find({});
@@ -635,7 +612,6 @@ router.post('/admin/daily-reset', verifyToken, checkRole(['admin']), async (req,
       queue.currentPatientIndex = 0;
       await queue.save();
     }
-    console.log('🧹 [BACKEND] Cleared', clearedPatients, 'patients from', queues.length, 'queues');
 
     // Restore all doctors' slots to max
     const doctors = await User.find({ role: 'doctor' });
@@ -643,7 +619,6 @@ router.post('/admin/daily-reset', verifyToken, checkRole(['admin']), async (req,
       doctor.available_slots = doctor.max_slots || 10;
       await doctor.save();
     }
-    console.log('🎫 [BACKEND] Reset slots for', doctors.length, 'doctors');
 
     res.json({
       success: true,
@@ -662,7 +637,6 @@ router.post('/admin/daily-reset', verifyToken, checkRole(['admin']), async (req,
 // Legacy clear all appointments (keeps for backward compat but now archives instead of deleting)
 router.delete('/admin/clear-all', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    console.log('🔄 [BACKEND] Archiving all appointments (soft reset)...');
 
     // Archive: mark all non-completed/non-cancelled appointments as completed
     const archiveResult = await Appointment.updateMany(
@@ -688,7 +662,6 @@ router.delete('/admin/clear-all', verifyToken, checkRole(['admin']), async (req,
       await doctor.save();
     }
 
-    console.log('✅ [BACKEND] Archived', archiveResult.modifiedCount, 'appointments, cleared', clearedPatients, 'queue patients');
 
     res.json({
       success: true,

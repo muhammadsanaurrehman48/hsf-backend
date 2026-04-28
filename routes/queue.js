@@ -9,20 +9,15 @@ const router = express.Router();
 router.get('/room/:roomNo', async (req, res) => {
   try {
     const roomNo = req.params.roomNo;
-    console.log('\n🔍 [QUEUE] Fetching queue for room:', roomNo);
     
     const queue = await Queue.findOne({ roomNo })
       .populate('doctorId', 'name department')
       .populate('patients.patientId', 'firstName lastName patientNo');
 
     if (!queue) {
-      console.log('⚠️ [QUEUE] No queue found for room:', roomNo);
       return res.status(404).json({ success: false, message: 'Queue not found for this room' });
     }
 
-    console.log('📊 [QUEUE] Queue found. Doctor:', queue.doctorName);
-    console.log('📋 [QUEUE] Total patients in queue:', queue.patients.length);
-    console.log('⏳ [QUEUE] Waiting patients:', queue.patients.filter(p => p.status === 'waiting').length);
 
     // Find current serving patient (read-only — no mutations in GET)
     const currentPatient = queue.patients[queue.currentPatientIndex] || null;
@@ -53,7 +48,6 @@ router.get('/room/:roomNo', async (req, res) => {
       })),
     };
 
-    console.log('✅ [QUEUE] Room', responseData.roomNo, '| Doctor:', responseData.doctorName, '| Today:', responseData.totalPatients, 'patients |', responseData.waitingPatients, 'waiting');
 
     res.json({ success: true, data: responseData });
   } catch (err) {
@@ -261,7 +255,6 @@ router.put('/:roomNo/current-token', verifyToken, async (req, res) => {
       const currentPatient = queue.patients[queue.currentPatientIndex];
       if (currentPatient.status === 'serving') {
         currentPatient.status = 'completed';
-        console.log('✅ [BACKEND] Marked', currentPatient.patientName, 'as completed');
       }
     }
 
@@ -270,7 +263,6 @@ router.put('/:roomNo/current-token', verifyToken, async (req, res) => {
     queue.currentToken = tokenNo;
     queue.patients[patientIndex].status = 'serving';
     
-    console.log('📢 [BACKEND] Current token updated to:', tokenNo, 'Patient:', queue.patients[patientIndex].patientName);
 
     await queue.save();
 

@@ -61,9 +61,6 @@ router.get('/appointment/:appointmentId', verifyToken, async (req, res) => {
 // Create vitals (Nurse entry)
 router.post('/', verifyToken, checkRole(['nurse', 'admin']), async (req, res) => {
   try {
-    console.log('📝 [BACKEND] Vitals save request received');
-    console.log('🔍 [BACKEND] User:', req.user.id, 'Role:', req.user.role);
-    console.log('📋 [BACKEND] Request body:', JSON.stringify(req.body, null, 2));
 
     const {
       appointmentId,
@@ -85,7 +82,6 @@ router.post('/', verifyToken, checkRole(['nurse', 'admin']), async (req, res) =>
     let resolvedPatientId = patientId;
     if (typeof patientId === 'object' && patientId !== null) {
       resolvedPatientId = patientId._id || patientId.id || String(patientId);
-      console.log('⚠️ [BACKEND] patientId was object, resolved to:', resolvedPatientId);
     } else {
       resolvedPatientId = String(patientId);
     }
@@ -117,13 +113,11 @@ router.post('/', verifyToken, checkRole(['nurse', 'admin']), async (req, res) =>
     });
 
     await vital.save();
-    console.log('✅ [BACKEND] Vitals recorded successfully for patient:', patient.firstName, patient.lastName);
 
     // Update appointment status to vitals_recorded and notify doctor
     if (appointmentId) {
       // Update appointment status
       await Appointment.findByIdAndUpdate(appointmentId, { status: 'vitals_recorded' });
-      console.log('📝 [BACKEND] Appointment status updated to vitals_recorded');
 
       // Update queue patient status
       const appointment = await Appointment.findById(appointmentId).select('doctorId appointmentNo roomNo');
@@ -135,7 +129,6 @@ router.post('/', verifyToken, checkRole(['nurse', 'admin']), async (req, res) =>
           if (queuePatient) {
             queuePatient.status = 'vitals_recorded';
             await queue.save();
-            console.log('📋 [BACKEND] Queue patient status updated to vitals_recorded');
           }
         }
       }
@@ -150,7 +143,6 @@ router.post('/', verifyToken, checkRole(['nurse', 'admin']), async (req, res) =>
           relatedType: 'vitals',
           actionUrl: `/doctor/appointments/${appointmentId}`,
         });
-        console.log('🔔 [BACKEND] Doctor notified about vitals');
       }
     }
 

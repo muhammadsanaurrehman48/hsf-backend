@@ -37,9 +37,7 @@ const mapPatient = (p) => ({
 // Get all patients
 router.get('/', verifyToken, async (req, res) => {
   try {
-    console.log('📋 [PATIENT] Fetching all patients');
     const patients = await Patient.find().sort({ createdAt: -1 });
-    console.log(`📋 [PATIENT] Found ${patients.length} patients`);
     
     const patientsData = patients.map(mapPatient);
     
@@ -58,7 +56,6 @@ router.get('/search/query', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Search query required' });
     }
 
-    console.log('🔍 [PATIENT] Searching for:', q);
     
     const patients = await Patient.find({
       $or: [
@@ -69,7 +66,6 @@ router.get('/search/query', verifyToken, async (req, res) => {
       ],
     });
 
-    console.log(`🔍 [PATIENT] Found ${patients.length} matching patients`);
 
     const results = patients.map(mapPatient);
 
@@ -83,7 +79,6 @@ router.get('/search/query', verifyToken, async (req, res) => {
 // Get patient by ID
 router.get('/:patientId', verifyToken, async (req, res) => {
   try {
-    console.log('👤 [PATIENT] Fetching patient:', req.params.patientId);
     const patient = await Patient.findById(req.params.patientId);
     
     if (!patient) {
@@ -99,7 +94,6 @@ router.get('/:patientId', verifyToken, async (req, res) => {
       family = householdMembers.map(mapPatient);
     }
 
-    console.log('✅ [PATIENT] Patient fetched:', patientData.patientNo);
     res.json({ 
       success: true, 
       data: patientData,
@@ -193,7 +187,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
           const relationKey = fm.relationToHead || '';
           const dedupKey = cnicKey || `${fullName.toLowerCase()}|${dobKey}|${relationKey}`;
           if (seenKeys.has(dedupKey)) {
-            console.log('⚠️ [PATIENT] Skipping duplicate family member entry:', dedupKey);
             return false;
           }
           seenKeys.add(dedupKey);
@@ -250,7 +243,6 @@ router.post('/', verifyToken, checkRole(['receptionist', 'admin']), async (req, 
 
     const patientData = mapPatient(newPatient);
 
-    console.log('✅ [PATIENT] Patient created successfully:', patientData.patientNo);
     
     res.status(201).json({ 
       success: true, 
@@ -275,8 +267,6 @@ router.put('/:patientId', verifyToken, checkRole(['receptionist', 'admin', 'doct
     delete updateData.createdAt;
     delete updateData._id;
 
-    console.log('📝 [PATIENT] Updating patient:', patientId);
-    console.log('📝 [PATIENT] Update data:', updateData);
 
     const patient = await Patient.findByIdAndUpdate(
       patientId,
@@ -289,7 +279,6 @@ router.put('/:patientId', verifyToken, checkRole(['receptionist', 'admin', 'doct
       return res.status(404).json({ success: false, message: 'Patient not found' });
     }
 
-    console.log('✅ [PATIENT] Patient updated successfully:', patientId);
     
     const responseData = mapPatient(patient);
 
@@ -307,13 +296,11 @@ router.put('/:patientId', verifyToken, checkRole(['receptionist', 'admin', 'doct
 // Delete patient
 router.delete('/:patientId', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
-    console.log('🗑️  [PATIENT] Deleting patient:', req.params.patientId);
     const patient = await Patient.findByIdAndDelete(req.params.patientId);
     if (!patient) {
       console.error('❌ [PATIENT] Patient not found for deletion:', req.params.patientId);
       return res.status(404).json({ success: false, message: 'Patient not found' });
     }
-    console.log('✅ [PATIENT] Patient deleted successfully:', patient.patientNo);
     res.json({ success: true, message: 'Patient deleted successfully' });
   } catch (err) {
     console.error('❌ [PATIENT] Error deleting patient:', err);

@@ -96,7 +96,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
       notes,
     } = req.body;
 
-    console.log('📝 [BACKEND] Creating prescription for patient:', patientId, '| appointment:', appointmentId);
 
     if (!patientId || !diagnosis) {
       console.error('❌ [BACKEND] Missing required fields. patientId:', patientId, '| diagnosis:', diagnosis);
@@ -107,7 +106,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
     if (appointmentId) {
       const existingRx = await Prescription.findOne({ appointmentId });
       if (existingRx) {
-        console.log('⚠️ [BACKEND] Prescription already exists for appointment:', appointmentId, '→ returning existing:', existingRx.rxNo);
         return res.status(201).json({
           success: true,
           message: 'Prescription already exists for this appointment',
@@ -143,7 +141,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
     });
 
     await newPrescription.save();
-    console.log('✅ [BACKEND] Prescription created:', rxNo);
 
     // Get patient and doctor info for notifications
     const patient = await Patient.findById(patientId);
@@ -167,11 +164,9 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
           status: 'pending',
         });
         labRequestDocs.push(labReq);
-        console.log('📋 [BACKEND] LabRequest created:', requestNo, '-', testName);
       }
 
       const labStaff = await User.find({ role: 'laboratory' });
-      console.log('🔔 [BACKEND] Notifying', labStaff.length, 'lab staff about new lab requests');
       
       for (const staff of labStaff) {
         await Notification.create({
@@ -184,7 +179,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
           actionUrl: `/laboratory/requests`,
         });
       }
-      console.log('✅ [BACKEND] Lab notifications created');
 
       // Create invoices for lab tests and notify receptionist
       if (patient) {
@@ -211,7 +205,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
               paymentStatus: 'pending',
             });
             await invoice.save();
-            console.log('✅ [PRESCRIPTION] Lab invoice created:', invoiceNo, 'for', labReq.test, '| Rs.', testPrice);
 
             // Notify receptionist/billing staff
             const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
@@ -226,7 +219,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
                 actionUrl: '/receptionist/billing',
               });
             }
-            console.log('🔔 [PRESCRIPTION] Notified', receptionists.length, 'receptionist/billing staff about lab invoice');
           } catch (invoiceErr) {
             console.error('⚠️ [PRESCRIPTION] Error creating lab invoice:', invoiceErr);
           }
@@ -250,11 +242,9 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
           requestDate: new Date(),
           status: 'pending',
         });
-        console.log('📋 [BACKEND] RadiologyRequest created:', requestNo, '-', testName);
       }
 
       const radiologyStaff = await User.find({ role: 'radiologist' });
-      console.log('🔔 [BACKEND] Notifying', radiologyStaff.length, 'radiology staff about new radiology requests');
       
       for (const staff of radiologyStaff) {
         await Notification.create({
@@ -267,7 +257,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
           actionUrl: `/radiologist/requests`,
         });
       }
-      console.log('✅ [BACKEND] Radiology notifications created');
 
       // Create invoices for radiology tests and notify receptionist
       if (patient) {
@@ -294,7 +283,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
               paymentStatus: 'pending',
             });
             await invoice.save();
-            console.log('✅ [PRESCRIPTION] Radiology invoice created:', invoiceNo, 'for', testName, '| Rs.', testPrice);
 
             // Notify receptionist/billing staff
             const receptionists = await User.find({ role: { $in: ['receptionist', 'billing'] } });
@@ -309,7 +297,6 @@ router.post('/', verifyToken, checkRole(['doctor', 'admin']), async (req, res) =
                 actionUrl: '/receptionist/billing',
               });
             }
-            console.log('🔔 [PRESCRIPTION] Notified', receptionists.length, 'receptionist/billing staff about radiology invoice');
           } catch (invoiceErr) {
             console.error('⚠️ [PRESCRIPTION] Error creating radiology invoice:', invoiceErr);
           }

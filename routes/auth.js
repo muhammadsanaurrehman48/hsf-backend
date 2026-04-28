@@ -18,23 +18,19 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
-    console.log(`[AUTH] Login attempt - Email: ${email}, Role: ${role}`);
 
     if (!email || !password || !role) {
-      console.log('[AUTH] Missing required fields');
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
     // First check if user exists with this email
     const userByEmail = await User.findOne({ email });
     if (!userByEmail) {
-      console.log(`[AUTH] No user found with email: ${email}`);
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     // Check if role matches
     if (userByEmail.role !== role) {
-      console.log(`[AUTH] Role mismatch - User role: ${userByEmail.role}, Requested role: ${role}`);
       return res.status(401).json({ 
         success: false, 
         message: `Invalid credentials. This user is registered as "${userByEmail.role}", not "${role}".` 
@@ -44,10 +40,8 @@ router.post('/login', async (req, res) => {
     const user = userByEmail;
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log(`[AUTH] Password valid: ${isPasswordValid}`);
 
     if (!isPasswordValid) {
-      console.log('[AUTH] Invalid password');
       return res.status(401).json({ success: false, message: 'Invalid credentials - wrong password' });
     }
 
@@ -60,7 +54,6 @@ router.post('/login', async (req, res) => {
       department: user.department 
     };
 
-    console.log(`[AUTH] Login successful for: ${user.name} (${user.role})`);
 
     res.json({
       success: true,
