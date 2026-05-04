@@ -32,10 +32,13 @@ const __dirname = dirname(__filename);
 
 const app = express();
 
+const normalizeOrigin = (value = '') => value.trim().replace(/\/$/, '');
+
 // Parse allowed origins from environment variables
-const allowedOrigins = (process.env.FRONTEND_URLS || 'http://localhost:5173')
+const allowedOrigins = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:5173')
   .split(',')
-  .map(url => url.trim());
+  .map(url => normalizeOrigin(url))
+  .filter(Boolean);
 
 console.log('🔐 [CORS] Allowed Origins:', allowedOrigins);
 
@@ -47,8 +50,10 @@ const corsOptions = {
       return callback(null, true);
     }
     
+    const normalizedOrigin = normalizeOrigin(origin);
+
     // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
     
