@@ -32,46 +32,30 @@ const __dirname = dirname(__filename);
 
 const app = express();
 
-const normalizeOrigin = (value = '') => value.trim().replace(/\/$/, '');
-
-// Parse allowed origins from environment variables
-const allowedOrigins = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:5173')
-  .split(',')
-  .map(url => normalizeOrigin(url))
-  .filter(Boolean);
+// 1. Parse the comma-separated string from Railway into an actual JavaScript array
+const allowedOrigins = process.env.FRONTEND_URLS 
+    ? process.env.FRONTEND_URLS.split(',').map(url => url.trim())
+    : ['http://localhost:5173'];
 
 console.log('🔐 [CORS] Allowed Origins:', allowedOrigins);
 
-// Dynamic CORS - allow local network IPs
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    const normalizedOrigin = normalizeOrigin(origin);
-
-    // Check if origin is in allowed list
-    if (allowedOrigins.includes(normalizedOrigin)) {
-      return callback(null, true);
-    }
-    
-    // Allow any localhost or local network IP (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
-    const localNetworkPattern = /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
-    if (localNetworkPattern.test(origin)) {
-      console.log('🔐 [CORS] Allowing local network origin:', origin);
-      return callback(null, true);
-    }
-    
-    console.log('🚫 [CORS] Blocked origin:', origin);
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-};
-
-// Middleware
-app.use(cors(corsOptions));
+// 2. Configure CORS to check against that array
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl requests, or Postman)
+        if (!origin) return callback(null, true);
+        
+        // Check if the incoming origin exists in our allowedOrigins array
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('🚫 [CORS] Blocked origin:', origin);
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+    },
+    credentials: true // Crucial if your authentication relies on passing cookies/tokens back and forth
+}));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
