@@ -34,10 +34,15 @@ const app = express();
 
 // 1. Parse the comma-separated string from Railway into an actual JavaScript array
 const allowedOrigins = process.env.FRONTEND_URLS 
-    ? process.env.FRONTEND_URLS.split(',').map(url => url.trim())
+    ? process.env.FRONTEND_URLS.split(',').map(url => url.trim()).filter(Boolean)
     : ['http://localhost:5173'];
 
-console.log('🔐 [CORS] Allowed Origins:', allowedOrigins);
+// Add default production domain if not present
+const productionDomains = ['https://health-hub-alpha-blue.vercel.app', 'http://localhost:5173'];
+const finalAllowedOrigins = [...new Set([...allowedOrigins, ...productionDomains])];
+
+console.log('🔐 [CORS] Environment FRONTEND_URLS:', process.env.FRONTEND_URLS);
+console.log('🔐 [CORS] Final Allowed Origins:', finalAllowedOrigins);
 
 // 2. Configure CORS to check against that array
 app.use(cors({
@@ -46,10 +51,11 @@ app.use(cors({
         if (!origin) return callback(null, true);
         
         // Check if the incoming origin exists in our allowedOrigins array
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        if (finalAllowedOrigins.indexOf(origin) !== -1 || finalAllowedOrigins.includes(origin)) {
+            console.log('✅ [CORS] Allowed origin:', origin);
             callback(null, true);
         } else {
-            console.log('🚫 [CORS] Blocked origin:', origin);
+            console.log('🚫 [CORS] Blocked origin:', origin, '| Allowed:', finalAllowedOrigins);
             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
             return callback(new Error(msg), false);
         }
